@@ -26,9 +26,11 @@ unsigned long now = 0; //for delay functions
 int playTone = 0;
 
 //database variables
-int dbLength = 10;
+const int dbLength = 10;
 int db[dbLength];
+int abundancy[dbLength];
 boolean dataExists = false;
+boolean dbFull = false;
 
 //clipping indicator variables
 boolean clipping = 0;
@@ -61,8 +63,8 @@ int timerTol = 5;//timer tolerance- adjust this if you need
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
-byte ampThreshold = 3;//raise if you have a very noisy signal
-byte midpoint = 107;
+byte ampThreshold = 4;//raise if you have a very noisy signal
+byte midpoint = 92;
 
 void setup() {
 
@@ -70,14 +72,23 @@ void setup() {
 
   pinMode(13, OUTPUT); //led indicator pin
   pinMode(12, OUTPUT); //output pin
-  pinMode(7, OUTPUT); //for testing
+  pinMode(7, OUTPUT); //speaker tone out
+  pinMode(8, OUTPUT); //speaker transistor trigger
 
-  //print database
-  for (int i = 0; i < dbLength; i++) {
+  //fill and print database
+  for (int i = 0; i < dbLength / 2; i++) {
+    float rndm = random(50, 500);
+    while (int(rndm) % 20 != 0) {
+      rndm++;
+    }
+
+    db[i] = rndm;
+    abundancy[i]++;
     Serial.print(db[i]);
     Serial.print(" | ");
   }
-  
+
+
   cli();//diable interrupts
 
   //set up continuous sampling of analog pin 0 at 38.5kHz
@@ -196,47 +207,75 @@ void sortFloat(float a[], int size) {
   }
 }
 
-void checkIncomingData(int incomingData);
-if (incomingData != 0) {
+void checkIncomingData(int incomingData) {
+  if (incomingData != 0) {
 
-  //data exists:
-  for (int i = 0; i < dbLength; i++) {
-    if (incomingData == db[i]) {
-      Serial.print("incoming data already existent.");
-      now = millis();
-      actMode = 2;
-      dataExists = true;
-      playTone = incomingData;
-      break;
-    }
-  }
-
-  //data does not exist:
-  if (!dataExists) {
+    //data exists:
     for (int i = 0; i < dbLength; i++) {
-      if (db[i] == 0) {
-        Serial.print("incoming data added to database.");
-        db[i] = incomingData;
-        actMode = 3;
-        playTone = incomingData + random(-300, 300); //should be closest instead
+      if (incomingData == db[i]) {
+        Serial.print("incoming data already existent.");
+        abundancy[i]++;
         now = millis();
+        actMode = 2;
+        dataExists = true;
+        playTone = incomingData;
         break;
       }
-      if (i == dbLength - 1) {
-        Serial.print("end of database reached.");
+    }
+
+    //data does not exist:
+    if (!dataExists) {
+      if (!dbFull) {
+        for (int i = 0; i < dbLength; i++) {
+          if (db[i] == 0) {
+            Serial.print("incoming data added to database.");
+            db[i] = incomingData;
+            abundancy[i]++;
+            actMode = 3;
+            playTone = incomingData + random(-300, 300); //should be closest instead
+            now = millis();
+            break;
+          }
+          if (i == dbLength - 1) {
+            Serial.print("end of database reached.");
+            dbFull = true;
+          }
+        }
+      }
+      if (dbFull) {
+        int lowest = abundancy[0];
+        int index = 0;
+        for (int i = 0; i < dbLength; i++) {
+          if (abundancy[i] < lowest) {
+            lowest = abundancy[i];
+            index = i;
+          }
+        }
+        abundancy[index]--;
+        if (abundancy[index] == 0) {
+          db[index] = incomingData;
+          abundancy[index] = 1;
+          actMode = 3;
+          playTone = incomingData + random(-300, 300);
+          now = millis();
+        }
       }
     }
-  }
 
-  //print database
-  for (int i = 0; i < dbLength; i++) {
-    Serial.print(db[i]);
-    Serial.print(" | ");
+    //print database and abundancies
+    for (int i = 0; i < dbLength; i++) {
+      Serial.print(db[i]);
+      Serial.print(" | ");
+    }
+      for (int i = 0; i < dbLength; i++) {
+      Serial.print(abundancy[i]);
+      Serial.print(" | ");
+    }
+    dataExists = false;
+    Serial.println();
+  } else {
+    Serial.println("incomingData == 0");
   }
-  dataExists = false;
-  Serial.println();
-} else {
-  Serial.println("incomingData == 0");
 }
 
 void loop() {
@@ -263,11 +302,13 @@ void loop() {
   if (actMode == 2 && millis() > now + 3000) {
     //emit same sound as heard, but stay
 
+    digitalWrite(8, HIGH);
     tone(7, playTone, 500);
   }
 
   if (actMode == 3 && millis() > now + 3000) {
     //emit closest sound, wait 4s, then move away
+    digitalWrite(8, HIGH);
     tone(7, playTone, 500);
   }
 }
