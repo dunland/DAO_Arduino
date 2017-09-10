@@ -38,7 +38,7 @@ unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
 byte ampThreshold = 4;//raise if you have a very noisy signal
-byte midpoint = 92;
+byte midpoint = 106;
 
 void setup(){
   

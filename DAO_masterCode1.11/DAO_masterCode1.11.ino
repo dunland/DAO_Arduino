@@ -1,4 +1,6 @@
-/*OTHERING MACHINES v.1.10. - after computer breakdown
+/*OTHERING MACHINES v.1.11.
+   enhanced logics: more functions, no actModes anymore, sortDatabase, take closest value,
+   reaction time
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
 
@@ -20,15 +22,21 @@
    also, my mid-point is at 107 (ca. 2V), this needs to be double-checked.
 */
 
+//OUTPUT PINS:
+const int LED = 5;
+const int VIBR = 3;
+const int TRIG = 8;
+const int SPEAK = 7;
+
 //reaction and behavior
-int actMode = 1;
 unsigned long now = 0; //for delay functions
-int playTone = 0;
+int freqTol = 20;
+int waitFactor = 200;
 
 //database variables
 const int dbLength = 10;
 int db[dbLength];
-int abundancy[dbLength];
+int ab[dbLength];
 boolean dataExists = false;
 boolean dbFull = false;
 
@@ -51,20 +59,18 @@ int newSlope;//storage for incoming slope data
 const int medianLength = 9; //for smoothing data
 float median[medianLength];
 
-int incomingData = 0; //saved signal to compare with database
-
 
 //variables for decided whether you have a match
 byte noMatch = 0;//counts how many non-matches you've received to reset variables if it's been too long
-byte slopeTol = 60;//slope tolerance- adjust this if you need
-int timerTol = 5;//timer tolerance- adjust this if you need
+byte slopeTol = 3;//slope tolerance- lower for steep waves
+int timerTol = 10;//timer tolerance- low for complicated waves/higher resolution
 
 //variables for amp detection
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
-byte ampThreshold = 4;//raise if you have a very noisy signal
-byte midpoint = 92;
+byte ampThreshold = 14;//raise if you have a very noisy signal
+byte midpoint = 106;
 
 void setup() {
 
@@ -72,14 +78,17 @@ void setup() {
 
   pinMode(13, OUTPUT); //led indicator pin
   pinMode(12, OUTPUT); //output pin
-  pinMode(7, OUTPUT); //speaker tone out
-  pinMode(8, OUTPUT); //speaker transistor trigger
+  pinMode(SPEAK, OUTPUT); //speaker tone out
+  pinMode(TRIG, OUTPUT); //speaker transistor trigger
+  pinMode(LED, OUTPUT); //for LED --> positive reaction
+  pinMode(VIBR, OUTPUT); //for vibrationmotor --> negative reaction
 
   boolean initEntryExist = true;
   float rndm;
   //fill and print database
+  Serial.println("filling database... ");
   for (int i = 0; i < dbLength / 2; i++) {
-    while (initEntryExist) {
+numgenerator: while (initEntryExist) {
       //generate new random entry dividable by 20
       rndm = random(50, 500);
       while (int(rndm) % 20 != 0) {
@@ -88,16 +97,14 @@ void setup() {
       //check existance
       for (int i = 0; i < dbLength; i++) {
         if (db[i] == rndm) {
-          initEntryExist = true;
-          if (i == dbLength - 1 && !initEntryExist) {
-            initEntryExist = false;
-          }
+          goto numgenerator;
         }
-      }
+      } break;
     }
+
     //add to db
     db[i] = rndm;
-    abundancy[i]++;
+    ab[i] += 2;
     Serial.print(db[i]);
     Serial.print(" | ");
   }
@@ -221,18 +228,78 @@ void sortFloat(float a[], int size) {
   }
 }
 
+void printDatabase() {
+  for (int i = 0; i < dbLength; i++) {
+    Serial.print(db[i]);
+    Serial.print(" | ");
+  }
+  Serial.println();
+  for (int i = 0; i < dbLength; i++) {
+    Serial.print(ab[i]);
+    Serial.print(" | ");
+  }
+  Serial.println();
+}
+
+void sortDatabase(int a[], int size) {
+  Serial.println("sorting database...");
+  for (int i = 0; i < (size - 1); i++) {
+    for (int o = 0; o < (size - (i + 1)); o++) {
+      if (a[o] > a[o + 1]) {
+        float t = a[o];
+        float b = ab[o]; //abundancy array
+        a[o] = a[o + 1];
+        ab[o] = ab[o + 1];
+        a[o + 1] = t;
+        ab[o + 1] = b;
+      }
+    }
+  }
+  printDatabase();
+}
+
+
+void positiveReaction(int playTone) {
+  //light LED, then emit same as heard
+  while (millis() < now + 1000) {
+    //do nothing / light LED
+    digitalWrite(LED, HIGH);
+  }
+  while(millis() < now + 1000){
+    //do nothing
+  }
+  digitalWrite(LED, LOW);
+  digitalWrite(TRIG, HIGH);
+  tone(SPEAK, playTone, 500);
+
+}
+
+void negativeReaction(int playTone, float wait) {
+  Serial.println("########## negative reaction ######");
+  //vibrate, then emit another (closest) sound
+  while (millis() < now + 2000) {
+    //do nothing / vibrate
+    digitalWrite(VIBR, HIGH);
+  }
+  digitalWrite(VIBR, LOW);
+  while (millis() < now + wait) {
+    //do nothing
+  }
+  digitalWrite(TRIG, HIGH);
+  tone(SPEAK, playTone, 500);
+}
+
 void checkIncomingData(int incomingData) {
   if (incomingData != 0) {
 
     //data exists:
     for (int i = 0; i < dbLength; i++) {
-      if (incomingData == db[i]) {
-        Serial.print("incoming data already existent.");
-        abundancy[i]++;
+      if (abs(incomingData - db[i]) < freqTol) {
+        Serial.println("######## data existent ########");
+        ab[i]++;
         now = millis();
-        actMode = 2;
         dataExists = true;
-        playTone = incomingData;
+        positiveReaction(incomingData);
         break;
       }
     }
@@ -240,53 +307,82 @@ void checkIncomingData(int incomingData) {
     //data does not exist:
     if (!dataExists) {
       if (!dbFull) {
+        Serial.println("######### db fillup ########");
         for (int i = 0; i < dbLength; i++) {
           if (db[i] == 0) {
-            Serial.print("incoming data added to database.");
+            Serial.println("incoming data added to database.");
             db[i] = incomingData;
-            abundancy[i]++;
-            actMode = 3;
-            playTone = incomingData + random(-300, 300); //should be closest instead
+            ab[i]++;
             now = millis();
+            while (millis() < now + 2000) {
+              digitalWrite(LED, HIGH);
+            }
+            digitalWrite(LED, LOW);
             break;
           }
           if (i == dbLength - 1) {
-            Serial.print("end of database reached.");
+            Serial.println("end of database reached.");
             dbFull = true;
           }
         }
       }
+
+      //full database: lower abundancy of lowest, overwrite if zero
       if (dbFull) {
-        int lowest = abundancy[0];
+        Serial.println("########## dbFull ##########");
+        int lowest = ab[0];
         int index = 0;
         for (int i = 0; i < dbLength; i++) {
-          if (abundancy[i] < lowest) {
-            lowest = abundancy[i];
+          if (ab[i] < lowest) {
+            lowest = ab[i];
             index = i;
           }
         }
-        abundancy[index]--;
-        if (abundancy[index] == 0) {
+        //lower abundancy
+        ab[index]--;
+        Serial.print(db[index]);
+        Serial.print(" dropped, ");
+        Serial.print(incomingData);
+        Serial.println(" added");
+
+        //if abundancy = 0, add data
+        if (ab[index] == 0) {
           db[index] = incomingData;
-          abundancy[index] = 1;
-          actMode = 3;
-          playTone = incomingData + random(-300, 300);
+          ab[index] = 1;
           now = millis();
+
+          //pick closest entry from db and respond
+          sortDatabase(db, dbLength);
+          float wait;
+          if (index == 0) {
+            //entry at start: wait dist
+            wait = abs(db[index + 1] - db[index]) * waitFactor;
+            Serial.print("entry at 0, wait = ");
+            Serial.println(wait);
+          } else if (index == dbLength - 1) {
+            wait = abs(db[index] - db[index - 1]) * waitFactor;
+            Serial.print("entry at end, wait = ");
+            Serial.println(wait);
+            //entry at end: wait dist
+          } else {
+            //middle: calc diff, wait dist
+            if (db[index] - db[index - 1] < db[index + 1] - db[index]) {
+              wait = abs(db[index + 1] - db[index]) * waitFactor;
+              Serial.print("db[index]-db[index-1] < db[index+1] - db[index], wait = ");
+              Serial.println(wait);
+            } else {
+              wait = abs(db[index] - db[index - 1]) * waitFactor;
+              Serial.print("db[index]-db[index-1] > db[index+1] - db[index], wait = ");
+              Serial.println(wait);
+            }
+          }
+
+          negativeReaction(lowest, wait);
         }
       }
     }
 
-    //print database and abundancies
-    for (int i = 0; i < dbLength; i++) {
-      Serial.print(db[i]);
-      Serial.print(" | ");
-    }
-    for (int i = 0; i < dbLength; i++) {
-      Serial.print(abundancy[i]);
-      Serial.print(" | ");
-    }
-    dataExists = false;
-    Serial.println();
+    printDatabase();
   } else {
     Serial.println("incomingData == 0");
   }
@@ -296,34 +392,26 @@ void loop() {
 
   checkClipping();
 
-  if (actMode == 1) {
+  digitalWrite(TRIG, LOW);
+  dataExists = false;
+
+  for (int i = 0; i < medianLength; i++) {
+    median[i] = 0;
+  }
+
+  if (checkMaxAmp > ampThreshold) {
     for (int i = 0; i < medianLength; i++) {
-      if (checkMaxAmp > ampThreshold) {
-        frequency = 38462 / float(period); //calculate frequency timer rate/period
-        median[i] = frequency;
-        //Serial.println(frequency);
-        delay(10);
-        sortFloat(median, medianLength);
-      }
+      frequency = 38462 / float(period); //calculate frequency timer rate/period
+      median[i] = frequency;
+      delay(10);
+      sortFloat(median, medianLength);
     }
 
+    Serial.println();
     Serial.print("new median = ");
     Serial.println(median[4]);
-    incomingData = median[4];
     checkIncomingData(median[4]);
   }
 
-  if (actMode == 2 && millis() > now + 3000) {
-    //emit same sound as heard, but stay
-
-    digitalWrite(8, HIGH);
-    tone(7, playTone, 500);
-  }
-
-  if (actMode == 3 && millis() > now + 3000) {
-    //emit closest sound, wait 4s, then move away
-    digitalWrite(8, HIGH);
-    tone(7, playTone, 500);
-  }
 }
 
