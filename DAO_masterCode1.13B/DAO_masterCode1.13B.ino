@@ -1,6 +1,5 @@
-/*OTHERING MACHINES v.1.12B. - COM4/Genuino)
-   LED reaction times, fillup loop fixed, negativeReaction waiting time and loudness
-   two-devices communication
+/*OTHERING MACHINES v.1.13B. - COM4/Genuino)
+   responsive behavior and dynamics of two communicating devices
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -77,6 +76,7 @@ byte midpoint = 204;
 void setup() {
 
   Serial.begin(9600);
+  randomSeed(analogRead(0));
 
   pinMode(13, OUTPUT); //led indicator pin
   pinMode(12, OUTPUT); //output pin
@@ -87,6 +87,8 @@ void setup() {
 
   boolean initEntryExist = true;
   float rndm;
+  Serial.print("waiting factor = ");
+  Serial.println(waitFactor);
   //fill and print database
   Serial.println("filling database... ");
   for (int i = 0; i < dbLength / 2; i++) {
@@ -266,12 +268,12 @@ void positiveReaction(int playTone) {
   Serial.println("######## APPROVE #######");
   now = millis();
   while (millis() < now + 500) {
-    Serial.println("do nothing / light LED");
+    //do nothing / light LED
     digitalWrite(LED, HIGH);
   }
   digitalWrite(LED, LOW);
   now = millis();
-  while (millis() < now + 3000) {
+  while (millis() < now + 30 * waitFactor) {
     //wait 3s before response
   }
   digitalWrite(TRIGGER, HIGH);
@@ -427,18 +429,20 @@ void checkIncomingData(int incomingData) {
 
 void loop() {
 
+  Serial.println("loops..");
   checkClipping();
 
   //digitalWrite(TRIGGER, LOW);
-  for (int i = 0; i < medianLength; i++) {
-    median[i] = 0;
-  }
+
 
   if (checkMaxAmp > ampThreshold) {
     for (int i = 0; i < medianLength; i++) {
       frequency = 38462 / float(period); //calculate frequency timer rate/period
       median[i] = frequency;
-      delay(10);
+      now = millis();
+      while (millis() < now + 40) {
+        //delay(40);
+      }
       sortFloat(median, medianLength);
     }
 
@@ -448,6 +452,9 @@ void loop() {
     dataExists = false;
     checkIncomingData(median[4]);
     checkMaxAmp = 0;
+    for (int i = 0; i < medianLength; i++) {
+      median[i] = 0;
+    }
   }
 
 }

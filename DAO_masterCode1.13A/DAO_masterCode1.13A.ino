@@ -1,6 +1,5 @@
-/*OTHERING MACHINES v.1.12B. - COM4/Genuino)
-   LED reaction times, fillup loop fixed, negativeReaction waiting time and loudness
-   two-devices communication
+/*OTHERING MACHINES v.1.13A. - COM5/Arduino)
+   responsive behavior and dynamics of two communicating devices
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -32,7 +31,8 @@ const int SPEAK = 7;
 //reaction and behavior
 unsigned long now = 0; //for delay functions
 int freqTol = 50;
-int waitFactor = 100;
+int waitFactor = 150;
+boolean listen = true;
 
 //database variables
 const int dbLength = 10;
@@ -65,18 +65,19 @@ float median[medianLength];
 //variables for decided whether you have a match
 byte noMatch = 0;//counts how many non-matches you've received to reset variables if it's been too long
 byte slopeTol = 100;//slope tolerance- higher for steep waves
-int timerTol = 5;//timer tolerance- low for complicated waves/higher resolution
+int timerTol = 3;//timer tolerance- low for complicated waves/higher resolution
 
 //variables for amp detection
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
 byte ampThreshold = 25;//raise if you have a very noisy signal
-byte midpoint = 204;
+byte midpoint = 195;
 
 void setup() {
 
   Serial.begin(9600);
+  randomSeed(analogRead(0));
 
   pinMode(13, OUTPUT); //led indicator pin
   pinMode(12, OUTPUT); //output pin
@@ -87,6 +88,8 @@ void setup() {
 
   boolean initEntryExist = true;
   float rndm;
+  Serial.print("waiting factor = ");
+  Serial.println(waitFactor);
   //fill and print database
   Serial.println("filling database... ");
   for (int i = 0; i < dbLength / 2; i++) {
@@ -134,74 +137,76 @@ numgenerator: while (initEntryExist) {
 
 ISR(ADC_vect) {//when new ADC value ready
 
-  PORTB &= B11101111;//set pin 12 low
-  prevData = newData;//store previous value
-  newData = ADCH;//get value from A0
-  if (prevData < midpoint && newData >= midpoint) { //if increasing and crossing midpoint
-    newSlope = newData - prevData;//calculate slope
-    if (abs(newSlope - maxSlope) < slopeTol) { //if slopes are ==
-      //record new data and reset time
-      slope[index] = newSlope;
-      timer[index] = time;
-      time = 0;
-      if (index == 0) { //new max slope just reset
-        PORTB |= B00010000;//set pin 12 high
-        noMatch = 0;
-        index++;//increment index
-      }
-      else if (abs(timer[0] - timer[index]) < timerTol && abs(slope[0] - newSlope) < slopeTol) { //if timer duration and slopes match
-        //sum timer values
-        totalTimer = 0;
-        for (byte i = 0; i < index; i++) {
-          totalTimer += timer[i];
+  if (listen) {
+    PORTB &= B11101111;//set pin 12 low
+    prevData = newData;//store previous value
+    newData = ADCH;//get value from A0
+    if (prevData < midpoint && newData >= midpoint) { //if increasing and crossing midpoint
+      newSlope = newData - prevData;//calculate slope
+      if (abs(newSlope - maxSlope) < slopeTol) { //if slopes are ==
+        //record new data and reset time
+        slope[index] = newSlope;
+        timer[index] = time;
+        time = 0;
+        if (index == 0) { //new max slope just reset
+          PORTB |= B00010000;//set pin 12 high
+          noMatch = 0;
+          index++;//increment index
         }
-        period = totalTimer;//set period
-        //reset new zero index values to compare with
-        timer[0] = timer[index];
-        slope[0] = slope[index];
-        index = 1;//set index to 1
-        PORTB |= B00010000;//set pin 12 high
-        noMatch = 0;
+        else if (abs(timer[0] - timer[index]) < timerTol && abs(slope[0] - newSlope) < slopeTol) { //if timer duration and slopes match
+          //sum timer values
+          totalTimer = 0;
+          for (byte i = 0; i < index; i++) {
+            totalTimer += timer[i];
+          }
+          period = totalTimer;//set period
+          //reset new zero index values to compare with
+          timer[0] = timer[index];
+          slope[0] = slope[index];
+          index = 1;//set index to 1
+          PORTB |= B00010000;//set pin 12 high
+          noMatch = 0;
+        }
+        else { //crossing midpoint but not match
+          index++;//increment index
+          if (index > 9) {
+            reset();
+          }
+        }
       }
-      else { //crossing midpoint but not match
-        index++;//increment index
-        if (index > 9) {
+      else if (newSlope > maxSlope) { //if new slope is much larger than max slope
+        maxSlope = newSlope;
+        time = 0;//reset clock
+        noMatch = 0;
+        index = 0;//reset index
+      }
+      else { //slope not steep enough
+        noMatch++;//increment no match counter
+        if (noMatch > 9) {
           reset();
         }
       }
     }
-    else if (newSlope > maxSlope) { //if new slope is much larger than max slope
-      maxSlope = newSlope;
-      time = 0;//reset clock
-      noMatch = 0;
-      index = 0;//reset index
+
+    if (newData == 0 || newData == 1023) { //if clipping
+      PORTB |= B00100000;//set pin 13 high- turn on clipping indicator led
+      clipping = 1;//currently clipping
     }
-    else { //slope not steep enough
-      noMatch++;//increment no match counter
-      if (noMatch > 9) {
-        reset();
-      }
+
+    time++;//increment timer at rate of 38.5kHz
+
+    //printing frequency only of signal loud enough
+    ampTimer++;//increment amplitude timer
+    if (abs(midpoint - ADCH) > maxAmp) {
+      maxAmp = abs(midpoint - ADCH);
     }
-  }
+    if (ampTimer == 1000) {
+      ampTimer = 0;
+      checkMaxAmp = maxAmp;
+      maxAmp = 0;
+    }
 
-  if (newData == 0 || newData == 1023) { //if clipping
-    PORTB |= B00100000;//set pin 13 high- turn on clipping indicator led
-    clipping = 1;//currently clipping
   }
-
-  time++;//increment timer at rate of 38.5kHz
-
-  //printing frequency only of signal loud enough
-  ampTimer++;//increment amplitude timer
-  if (abs(midpoint - ADCH) > maxAmp) {
-    maxAmp = abs(midpoint - ADCH);
-  }
-  if (ampTimer == 1000) {
-    ampTimer = 0;
-    checkMaxAmp = maxAmp;
-    maxAmp = 0;
-  }
-
 }
 
 void reset() { //clea out some variables
@@ -266,22 +271,44 @@ void positiveReaction(int playTone) {
   Serial.println("######## APPROVE #######");
   now = millis();
   while (millis() < now + 500) {
-    Serial.println("do nothing / light LED");
+    if (millis() % 100 == 0) {
+      Serial.print("light LED / do nothing .. ");
+    }
     digitalWrite(LED, HIGH);
   }
+  Serial.println();
   digitalWrite(LED, LOW);
+
   now = millis();
-  while (millis() < now + 3000) {
-    //wait 3s before response
+  while (millis() < now + 30 * waitFactor) {
+    if (millis() % 500 == 0) {
+      Serial.print("waiting before response.. ");
+    }
   }
+
   digitalWrite(TRIGGER, HIGH);
-  tone(SPEAK, playTone, 300);
   now = millis();
-  while (millis() < now + 500) {
-    //wait until tone is over
+  while (millis() < now + 300) {
+    tone(SPEAK, playTone, 10);
+    //reset all values to avoid self-recording:
+    checkMaxAmp = 0;
+    ampTimer = 0;
+    for (int i = 0; i < medianLength; i++) {
+      median[i] = 0;
+    }
+    if (millis() % 500 == 0) {
+      Serial.print("producing the same tone.. ");
+    }
   }
   digitalWrite(TRIGGER, LOW);
-
+  
+  now = millis();
+  while (millis() < now + 1000) {
+    if (millis() % 500 == 0) {
+      Serial.print("waiting again.. ");
+    }
+  }
+  Serial.println();
 
 }
 
@@ -290,21 +317,37 @@ void negativeReaction(int playTone, unsigned long wait) {
   //vibrate, then emit another (closest) sound
   now = millis();
   while (millis() < now + 1000) {
-    //vibrate for 1s
+    if (millis() % 250) {
+      Serial.print("vibrating.. ");
+    }
     digitalWrite(VIBR, HIGH);
   }
   digitalWrite(VIBR, LOW);
+  Serial.println();
+
   now = millis();
   while (millis() < now + wait) {
-    //wait.
+    if (millis() % 1000 == 0) {
+      Serial.print(", waiting another ");
+      Serial.print(abs(now + wait - millis()));
+    }
   }
+
   digitalWrite(TRIGGER, HIGH);
   tone(SPEAK, playTone, 300);
   now = millis();
-  while (millis() < now + 500) {
-    //wait 500ms until tone is over
+  while (millis() < now + 1000) {
+    if (millis() % 100 == 0) {
+      Serial.print("producing another tone.. ");
+    }
   }
+
   digitalWrite(TRIGGER, LOW);
+  //wait without interrupts
+  noInterrupts();
+  delay(1000);
+  interrupts();
+  Serial.println();
 }
 
 void checkIncomingData(int incomingData) {
@@ -334,8 +377,10 @@ void checkIncomingData(int incomingData) {
               digitalWrite(LED, HIGH);
             }
             digitalWrite(LED, LOW);
-            while (millis() < now + 3750) {
-              //do nothiing
+            while (millis() < now + 750) {
+              if (millis() % 200 == 0) {
+                Serial.print("doing nothing for a while.. ");
+              }
             }
             break;
           }
@@ -372,14 +417,18 @@ void checkIncomingData(int incomingData) {
           sortDatabase(db, dbLength);
           unsigned long wait = 0;
           int closest = 0;
+          int diff = 0;
+
           if (index == 0) {
             //entry at start: wait dist
-            wait = abs(db[index + 1] - db[index]) * waitFactor;
+            diff = abs(db[index + 1] - db[index]);
+            wait = diff * waitFactor;
             closest = db[index + 1];
             Serial.print("entry at 0, wait = ");
             Serial.println(wait);
           } else if (index == dbLength - 1) {
-            wait = abs(db[index] - db[index - 1]) * waitFactor;
+            diff = abs(db[index] - db[index - 1]);
+            wait = diff * waitFactor;
             closest = db[dbLength - 2];
             Serial.print("entry at end, wait = ");
             Serial.println(wait);
@@ -387,7 +436,8 @@ void checkIncomingData(int incomingData) {
           } else {
             //middle: calc diff, wait dist
             if (db[index] - db[index - 1] < db[index + 1] - db[index]) {
-              wait = abs(db[index] - db[index - 1]) * waitFactor;
+              diff = abs(db[index] - db[index - 1]);
+              wait = diff * waitFactor;
               closest = db[index - 1];
               Serial.print(db[index]);
               Serial.print(" - ");
@@ -399,7 +449,8 @@ void checkIncomingData(int incomingData) {
               Serial.print(", difference/wait = ");
               Serial.println(wait);
             } else {
-              wait = abs(db[index + 1] - db[index]) * waitFactor;
+              diff = abs(db[index + 1] - db[index]);
+              wait = diff * waitFactor;
               closest = db[index + 1];
               Serial.print(db[index]);
               Serial.print(" - ");
@@ -430,24 +481,29 @@ void loop() {
   checkClipping();
 
   //digitalWrite(TRIGGER, LOW);
-  for (int i = 0; i < medianLength; i++) {
-    median[i] = 0;
-  }
+  listen = true;
 
   if (checkMaxAmp > ampThreshold) {
     for (int i = 0; i < medianLength; i++) {
       frequency = 38462 / float(period); //calculate frequency timer rate/period
       median[i] = frequency;
-      delay(10);
+      now = millis();
+      while (millis() < now + 40) {
+        //delay(40);
+      }
       sortFloat(median, medianLength);
     }
 
     Serial.println();
-    Serial.print("new median = ");
-    Serial.println(median[4]);
+    //Serial.print("new median = ");
+    //Serial.println(median[4]);
+    Serial.print("new frequency = ");
+    Serial.println(frequency);
     dataExists = false;
-    checkIncomingData(median[4]);
-    checkMaxAmp = 0;
+    //checkIncomingData(median[4]);
+    listen = false;
+    checkIncomingData(frequency);
   }
 
 }
+

@@ -37,8 +37,8 @@ int timerTol = 10;//timer tolerance- adjust this if you need
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
-byte ampThreshold = 4;//raise if you have a very noisy signal
-byte midpoint = 106;
+byte ampThreshold = 25;//raise if you have a very noisy signal
+byte midpoint = 195;
 
 void setup(){
   
