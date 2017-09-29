@@ -1,4 +1,4 @@
-int note = 1000;
+int note = 300;
 
 void setup() {
   Serial.begin(9600);
@@ -10,8 +10,9 @@ void loop() {
   Serial.println(note);
   digitalWrite(8, HIGH);
   tone(7, note, 500);
-  delay(2000);
+  delay(1000);
   digitalWrite(8, LOW);
+  delay(3000);
 
   note += 100;
 }
