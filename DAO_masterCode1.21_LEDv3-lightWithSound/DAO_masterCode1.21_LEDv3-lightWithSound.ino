@@ -1,6 +1,8 @@
-/*OTHERING MACHINES v.1.19 - COM4/Genuino
-   mounting version - only midpoint to reset
-   all //Serial.prints removed
+/*OTHERING MACHINES v.1.21
+  RGB-LED lights up with sound
+  light represents abundancies of frequencies in db
+  long subsiding times after approve/reject/fillup
+  -> longer waitFactor = 1200
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -45,6 +47,7 @@ float redAb = 0;
 float blueAb = 0;
 float greenAb = 0;
 float abTot = 0; //total abundancy of frequencies in db
+boolean ledState = LOW;
 
 //database variables
 const int dbLength = 6;
@@ -59,7 +62,7 @@ boolean clipping = 0;
 //data storage variables
 byte newData = 0;
 byte prevData = 0;
-unsigned int time = 0;//keeps time and sends vales to store in timer[] occasionally
+unsigned int time = 0;//keeps time and sends values to store in timer[] occasionally
 int timer[10];//sstorage for timing of events
 int slope[10];//storage for slope of events
 unsigned int totalTimer;//used to calculate period
@@ -83,15 +86,15 @@ int timerTol = 5;//timer tolerance- low for complicated waves/higher resolution
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
-byte ampThreshold = 15;//raise if you have a very noisy signal
-byte midpoint = 180;
+byte ampThreshold = 30;//raise if you have a very noisy signal
+byte midpoint = 193;
 
 void setup() {
 
   //Serial.begin(115200);
   randomSeed(analogRead(0));
   respondFactor = random(100, 201); //that is a factor of 0.1 to 0.2 seconds
-  waitFactor = respondFactor * 600; //time to pass before timedStatement
+  waitFactor = respondFactor * 1200; //time to pass before timedStatement
 
   pinMode(13, OUTPUT); //led indicator pin
   pinMode(12, OUTPUT); //output pin
@@ -155,6 +158,10 @@ void setup() {
     blueAb++;
   }
   lightLED();
+  while (millis() < now + 3000) {
+    //do nothing
+  }
+  unlightLED();
 
 
 
@@ -272,7 +279,8 @@ ISR(ADC_vect) {//when new ADC value ready
     if (abs(midpoint - ADCH) > maxAmp) {
       maxAmp = abs(midpoint - ADCH);
     }
-    if (ampTimer == 1000) {
+    if (ampTimer == 7600) {
+      //Serial.println("ampTimer refreshed");
       ampTimer = 0;
       checkMaxAmp = maxAmp;
       maxAmp = 0;
@@ -284,7 +292,7 @@ ISR(ADC_vect) {//when new ADC value ready
 
 void reset() { //clea out some variables
   index = 0;//reset index
-  noMatch = 0;//reset match couner
+  noMatch = 0;//reset match counter
   maxSlope = 0;//reset slope
 }
 
@@ -310,13 +318,13 @@ void sortFloat(float a[], int size) {
 
 void printDatabase() {
   //for (int i = 0; i < dbLength; i++) {
-    //Serial.print(db[i]);
-    //Serial.print(" | ");
+  //Serial.print(db[i]);
+  //Serial.print(" | ");
   //}
   //Serial.println();
   //for (int i = 0; i < dbLength; i++) {
-    //Serial.print(ab[i]);
-    //Serial.print(" | ");
+  //Serial.print(ab[i]);
+  //Serial.print(" | ");
   //}
   //Serial.println();
 }
@@ -334,7 +342,19 @@ void sortDatabase(int a[], int size) {
       }
     }
   }
-  printDatabase();
+  //printDatabase();
+}
+void doNothing(int waitingTime) {
+  now = millis();
+  //Serial.print("do nothing: ");
+  //Serial.println(waitingTime);
+  while (millis() < now + waitingTime) {
+    if (millis() % 500 == 0) {
+      digitalWrite(LED_info, HIGH);
+      delay(50);
+      digitalWrite(LED_info, LOW);
+    }
+  }
 }
 
 void timedStatement() {
@@ -347,7 +367,7 @@ void timedStatement() {
   }
   int playTimed = db[highestIdx];
   digitalWrite(TRIGGER, HIGH);
-  digitalWrite(LED_info, HIGH);
+  lightLED();
   now = millis();
   while (millis() < now + 600) {
     tone(SPEAK, playTimed, 10);
@@ -358,12 +378,8 @@ void timedStatement() {
   }
   //Serial.println();
   digitalWrite(TRIGGER, LOW);
-  digitalWrite(LED_info, LOW);
-
-  now = millis();
-  while (millis() < now + 4000) {
-    //do nothing
-  }
+  unlightLED();
+  doNothing(4000);
 }
 
 void lightLED() {
@@ -383,6 +399,12 @@ void lightLED() {
   //Serial.println(blue);
 }
 
+void unlightLED() {
+  digitalWrite(LED_R, LOW);
+  digitalWrite(LED_G, LOW);
+  digitalWrite(LED_B, LOW);
+}
+
 void positiveReaction(int playPos) {
   //light LED, then emit same as heard
   //Serial.println("######## APPROVE #######");
@@ -391,26 +413,20 @@ void positiveReaction(int playPos) {
     digitalWrite(LED_info, HIGH);
   }
   digitalWrite(LED_info, LOW);
-  now = millis();
-  while (millis() < now + 3000) {
-    //do nothing
-  }
+  doNothing(1000);
 
   digitalWrite(TRIGGER, HIGH);
-  digitalWrite(LED_info, HIGH);
+  lightLED();
   now = millis();
   while (millis() < now + 600) {
     tone(SPEAK, playPos, 10);
   }
   //Serial.println();
   digitalWrite(TRIGGER, LOW);
-  digitalWrite(LED_info, LOW);
+  unlightLED();
 
-  //Abklingzeit
-  now = millis();
-  while (millis() < now + 3000) {
-    //do nothing
-  }
+  //subsiding time
+  doNothing(10000);
 }
 
 void negativeReaction(int playNeg, unsigned long wait) {
@@ -422,29 +438,36 @@ void negativeReaction(int playNeg, unsigned long wait) {
   }
   digitalWrite(VIBR, LOW);
 
-  //wait a bit:
+  //waiting time
   //Serial.print("waiting time: ");
   //Serial.println(wait);
   now = millis();
-  while (millis() < now + wait) {}
+  while (millis() < now + wait) {
+    if (millis() % 400 == 10) { //busy blinking in contrast to normal release times
+      digitalWrite(LED_info, ledState);
+      ledState = !ledState;
+      delay(10);
+    }
+  }
+  ledState = LOW;
+  digitalWrite(LED_info, LOW);
 
   //play tone:
   digitalWrite(TRIGGER, HIGH);
-  digitalWrite(LED_info, HIGH);
+  lightLED();
   now = millis();
   while (millis() < now + 600) {
     tone(SPEAK, playNeg, 10);
   }
   digitalWrite(TRIGGER, LOW);
-  digitalWrite(LED_info, LOW);
+  unlightLED();
 
 
-  //release time
+  //subsiding time
   now = millis();
-  while (millis() < now + 2000) {
-    //do nothing
-  }
+  doNothing(10000);
 }
+
 
 void checkIncomingData(int incomingData) {
   if (incomingData >= 300 && incomingData <= 2400) {
@@ -484,39 +507,35 @@ void checkIncomingData(int incomingData) {
             } else if (incomingData >= 1700 && incomingData < 2401) {
               blueAb++;
             }
+
+            //light LED_info shortly
             now = millis();
             while (millis() < now + 250) {
               digitalWrite(LED_info, HIGH);
             }
             digitalWrite(LED_info, LOW);
-            while (millis() < now + 2750) {         }
+
+            //subsiding time
+            doNothing(5000);
+
             break;
           }
+
+          //check if database == full
           if (i == dbLength - 1) {
             //Serial.println("----------------end of database reached.----------------");
-//            //blink vibrator
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, LOW);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, LOW);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//
-//            digitalWrite(VIBR, LOW);
+            //blink LED fast
+            now = millis();
+            while (millis() < now + 2000) {
+              if (millis() % 25 == 0) {
+                digitalWrite(LED_info, ledState);
+                ledState = !ledState;
+                delay(10);
+              }
+            }
+            ledState = LOW;
+            digitalWrite(LED_info, LOW);
+
             dbFull = true;
           }
         }
@@ -543,6 +562,7 @@ void checkIncomingData(int incomingData) {
         } else if (incomingData >= 1700 && incomingData < 2401) {
           blueAb--;
         }
+
         //if abundancy = 0, add data
         if (ab[lowestIdx] == 0) {
           //Serial.print(db[lowestIdx]);
@@ -550,6 +570,7 @@ void checkIncomingData(int incomingData) {
           //Serial.print(incomingData);
           //Serial.println(" added");
 
+          //increase abundancy
           db[lowestIdx] = incomingData;
           ab[lowestIdx] = 1;
           abTot++;
@@ -613,12 +634,10 @@ void checkIncomingData(int incomingData) {
       }
     }
     //Serial.println();
-    lightLED();
-    printDatabase();
+    //printDatabase();
   } else {
     //Serial.println("incomingData out of range");
   }
-  listen = true;
 }
 
 void loop() {
@@ -633,22 +652,17 @@ void loop() {
     for (int i = 0; i < medianLength; i++) {
       frequency = 38462 / float(period); //calculate frequency timer rate/period
       median[i] = frequency;
-      now = millis();
-      while (millis() < now + 40) {
-        //delay(40);
-      }
+      delay(10);
+
       sortFloat(median, medianLength);
     }
 
     //Serial.println();
     //Serial.print("new median = ");
     //Serial.println(median[4]);
-    ////Serial.print("new frequency = ");
-    ////Serial.println(frequency);
     dataExists = false;
     listen = false;
     checkIncomingData(median[4]);
-    //checkIncomingData(frequency);
 
     //reset all values to avoid self-recording:
     maxAmp = 0;
@@ -658,6 +672,7 @@ void loop() {
       median[i] = 0;
     }
     frequency = 0;
+    listen = true;
   }
 
 }

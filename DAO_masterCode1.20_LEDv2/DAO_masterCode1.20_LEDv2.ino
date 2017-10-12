@@ -1,6 +1,6 @@
-/*OTHERING MACHINES v.1.19 - COM4/Genuino
+/*OTHERING MACHINES v.1.20 - COM4/Genuino
    mounting version - only midpoint to reset
-   all //Serial.prints removed
+  only one RGBLED color at the time: more than 1 color change thle overall voltage!
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -38,13 +38,10 @@ unsigned long respondFactor; //will be declared after randomSeed is set
 unsigned long waitFactor; //will be declared after randomSeed is set
 boolean listen = true;
 //LED intensity
-float red;
-float green;
-float blue;
-float redAb = 0;
-float blueAb = 0;
-float greenAb = 0;
-float abTot = 0; //total abundancy of frequencies in db
+int LED_RGB; // declares RGB color PIN
+int intensity = 0;
+boolean ledState = LOW;
+
 
 //database variables
 const int dbLength = 6;
@@ -83,12 +80,12 @@ int timerTol = 5;//timer tolerance- low for complicated waves/higher resolution
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
-byte ampThreshold = 15;//raise if you have a very noisy signal
-byte midpoint = 180;
+byte ampThreshold = 12;//raise if you have a very noisy signal
+byte midpoint = 204;
 
 void setup() {
 
-  //Serial.begin(115200);
+  //Serial.begin(9600);
   randomSeed(analogRead(0));
   respondFactor = random(100, 201); //that is a factor of 0.1 to 0.2 seconds
   waitFactor = respondFactor * 600; //time to pass before timedStatement
@@ -146,43 +143,24 @@ void setup() {
   db[0] = rndm;
   //Serial.println(db[0]);
   ab[0] = 1;
-  abTot = 1;
+
   if (rndm >= 300 && rndm < 1000) {
-    redAb++;
+    LED_RGB = LED_R;
+    intensity = (0.4 + ((rndm - 300) / 700)) * 255;
   } else if (rndm >= 1000 && rndm < 1700) {
-    greenAb++;
+    LED_RGB = LED_G;
+    intensity = (0.4 + ((rndm - 1000) / 700)) * 255;
   } else if (rndm >= 1700 && rndm < 2401) {
-    blueAb++;
+    LED_RGB = LED_B;
+    intensity = (0.4 + ((rndm - 1700) / 700)) * 255;
   }
-  lightLED();
 
-
-
-  //  //filling multiple randomly:
-  //boolean initEntryExist = true;
-  //  for (int i = 0; i < dbLength / 2; i++) {
-  //numgenerator: while (initEntryExist) {
-  //      //generate new random entry dividable by 20
-  //      rndm = random(300, 2401);
-  //      while (int(rndm) % 20 != 0) {
-  //        rndm++;
-  //      }
-  //      //check existence
-  //      for (int i = 0; i < dbLength; i++) {
-  //        if (db[i] == rndm) {
-  //          goto numgenerator;
-  //        }
-  //      } break;
-  //    }
-  //
-  //    //add to db
-  //    db[i] = rndm;
-  //    ab[i] += 1;
-  //    abTot += 1;
-  //    //Serial.print(db[i]);
-  //    //Serial.print(" | ");
-  //  }
-
+  analogWrite(LED_RGB, intensity);
+  now = millis();
+  while (millis() < now + 3500) {
+    //do nothing
+  }
+  digitalWrite(LED_RGB, LOW);
 
 
 
@@ -309,15 +287,15 @@ void sortFloat(float a[], int size) {
 }
 
 void printDatabase() {
-  //for (int i = 0; i < dbLength; i++) {
+  for (int i = 0; i < dbLength; i++) {
     //Serial.print(db[i]);
     //Serial.print(" | ");
-  //}
+  }
   //Serial.println();
-  //for (int i = 0; i < dbLength; i++) {
+  for (int i = 0; i < dbLength; i++) {
     //Serial.print(ab[i]);
     //Serial.print(" | ");
-  //}
+  }
   //Serial.println();
 }
 
@@ -347,7 +325,7 @@ void timedStatement() {
   }
   int playTimed = db[highestIdx];
   digitalWrite(TRIGGER, HIGH);
-  digitalWrite(LED_info, HIGH);
+  analogWrite(LED_RGB, intensity);
   now = millis();
   while (millis() < now + 600) {
     tone(SPEAK, playTimed, 10);
@@ -358,29 +336,12 @@ void timedStatement() {
   }
   //Serial.println();
   digitalWrite(TRIGGER, LOW);
-  digitalWrite(LED_info, LOW);
+  digitalWrite(LED_RGB, LOW);
 
   now = millis();
   while (millis() < now + 4000) {
     //do nothing
   }
-}
-
-void lightLED() {
-  //set RGB_LED
-  red = (redAb / abTot) * 255;
-  green = (greenAb / abTot) * 255;
-  blue = (blueAb / abTot) * 255;
-  analogWrite(LED_R, red);
-  analogWrite(LED_G, green);
-  analogWrite(LED_B, blue);
-
-  //Serial.print("Intensities: red = ");
-  //Serial.print(red);
-  //Serial.print(", green = ");
-  //Serial.print(green);
-  //Serial.print(", blue = ");
-  //Serial.println(blue);
 }
 
 void positiveReaction(int playPos) {
@@ -397,14 +358,14 @@ void positiveReaction(int playPos) {
   }
 
   digitalWrite(TRIGGER, HIGH);
-  digitalWrite(LED_info, HIGH);
+  analogWrite(LED_RGB, intensity);
   now = millis();
   while (millis() < now + 600) {
     tone(SPEAK, playPos, 10);
   }
   //Serial.println();
   digitalWrite(TRIGGER, LOW);
-  digitalWrite(LED_info, LOW);
+  digitalWrite(LED_RGB, LOW);
 
   //Abklingzeit
   now = millis();
@@ -426,17 +387,25 @@ void negativeReaction(int playNeg, unsigned long wait) {
   //Serial.print("waiting time: ");
   //Serial.println(wait);
   now = millis();
-  while (millis() < now + wait) {}
+  while (millis() < now + wait) {
+    if (millis() % 1000 <= 10) {
+      digitalWrite(LED_info, ledState);
+      ledState = !ledState;
+    }
+  }
+  ledState = LOW;
+  digitalWrite(LED_info, LOW);
+
 
   //play tone:
   digitalWrite(TRIGGER, HIGH);
-  digitalWrite(LED_info, HIGH);
+  analogWrite(LED_RGB, intensity);
   now = millis();
   while (millis() < now + 600) {
     tone(SPEAK, playNeg, 10);
   }
   digitalWrite(TRIGGER, LOW);
-  digitalWrite(LED_info, LOW);
+  digitalWrite(LED_RGB, LOW);
 
 
   //release time
@@ -449,18 +418,22 @@ void negativeReaction(int playNeg, unsigned long wait) {
 void checkIncomingData(int incomingData) {
   if (incomingData >= 300 && incomingData <= 2400) {
 
+    if (incomingData >= 300 && incomingData < 1000) {
+      LED_RGB = LED_R;
+      intensity = (0.4 + ((incomingData - 300) / 700)) * 255;
+      LED_RGB = LED_G;
+    } else if (incomingData >= 1000 && incomingData < 1700) {
+      intensity = (0.4 + ((incomingData - 1000) / 700)) * 255;
+    } else if (incomingData >= 1700 && incomingData < 2401) {
+      LED_RGB = LED_B;
+      intensity = (0.4 + ((incomingData - 1700) / 700)) * 255;
+    }
+
     //data (incomingData within acceptable tolerance): increase abundancy
     for (int i = 0; i < dbLength; i++) {
       if (abs(incomingData - db[i]) < freqTol) {
         ab[i]++;
-        abTot++;
-        if (incomingData >= 300 && incomingData < 1000) {
-          redAb++;
-        } else if (incomingData >= 1000 && incomingData < 1700) {
-          greenAb++;
-        } else if (incomingData >= 1700 && incomingData < 2401) {
-          blueAb++;
-        }
+
         dataExists = true;
         positiveReaction(incomingData);
         break;
@@ -476,47 +449,27 @@ void checkIncomingData(int incomingData) {
           if (db[i] == 0) {
             db[i] = incomingData;
             ab[i]++;
-            abTot++;
-            if (incomingData >= 300 && incomingData < 1000) {
-              redAb++;
-            } else if (incomingData >= 1000 && incomingData < 1700) {
-              greenAb++;
-            } else if (incomingData >= 1700 && incomingData < 2401) {
-              blueAb++;
-            }
+
             now = millis();
-            while (millis() < now + 250) {
+            while (millis() < now + 200) {
               digitalWrite(LED_info, HIGH);
             }
             digitalWrite(LED_info, LOW);
-            while (millis() < now + 2750) {         }
+            while (millis() < now + 1800) {         }
             break;
           }
           if (i == dbLength - 1) {
             //Serial.println("----------------end of database reached.----------------");
-//            //blink vibrator
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, LOW);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, LOW);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//
-//            digitalWrite(VIBR, LOW);
+            //blink LED
+            now = millis();
+            while (millis() < now + 1500) {
+              if (millis() % 300 == 0) {
+                digitalWrite(LED_info, ledState);
+                ledState = !ledState;
+              }
+            }
+
+            digitalWrite(VIBR, LOW);
             dbFull = true;
           }
         }
@@ -535,14 +488,7 @@ void checkIncomingData(int incomingData) {
         }
         //lower abundancy
         ab[lowestIdx]--;
-        abTot--;
-        if (incomingData >= 300 && incomingData < 1000) {
-          redAb--;
-        } else if (incomingData >= 1000 && incomingData < 1700) {
-          greenAb--;
-        } else if (incomingData >= 1700 && incomingData < 2401) {
-          blueAb--;
-        }
+
         //if abundancy = 0, add data
         if (ab[lowestIdx] == 0) {
           //Serial.print(db[lowestIdx]);
@@ -552,14 +498,6 @@ void checkIncomingData(int incomingData) {
 
           db[lowestIdx] = incomingData;
           ab[lowestIdx] = 1;
-          abTot++;
-          if (incomingData >= 300 && incomingData < 1000) {
-            redAb++;
-          } else if (incomingData >= 1000 && incomingData < 1700) {
-            greenAb++;
-          } else if (incomingData >= 1700 && incomingData < 2401) {
-            blueAb++;
-          }
 
           //pick closest entry from db and respond
           sortDatabase(db, dbLength);
@@ -613,7 +551,6 @@ void checkIncomingData(int incomingData) {
       }
     }
     //Serial.println();
-    lightLED();
     printDatabase();
   } else {
     //Serial.println("incomingData out of range");
@@ -624,6 +561,8 @@ void checkIncomingData(int incomingData) {
 void loop() {
 
   checkClipping();
+
+  //Serial.println(newData);
 
   if (millis() % (waitFactor) <= 300) {
     timedStatement();

@@ -1,6 +1,8 @@
-/*OTHERING MACHINES v.1.19 - COM4/Genuino
-   mounting version - only midpoint to reset
-   all //Serial.prints removed
+/*OTHERING MACHINES v.1.20 - COM4/Genuino
+ * mounting version for individual modules
+ * midpoint, threshold? adjustments
+ * pin cponfdigurations setup 2: 
+ *  LED = 
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -84,7 +86,7 @@ unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
 byte ampThreshold = 15;//raise if you have a very noisy signal
-byte midpoint = 180;
+byte midpoint = 199;
 
 void setup() {
 
@@ -309,15 +311,15 @@ void sortFloat(float a[], int size) {
 }
 
 void printDatabase() {
-  //for (int i = 0; i < dbLength; i++) {
+  for (int i = 0; i < dbLength; i++) {
     //Serial.print(db[i]);
     //Serial.print(" | ");
-  //}
+  }
   //Serial.println();
-  //for (int i = 0; i < dbLength; i++) {
+  for (int i = 0; i < dbLength; i++) {
     //Serial.print(ab[i]);
     //Serial.print(" | ");
-  //}
+  }
   //Serial.println();
 }
 
@@ -345,15 +347,15 @@ void timedStatement() {
       highestIdx = i;
     }
   }
-  int playTimed = db[highestIdx];
+  int playTone = db[highestIdx];
   digitalWrite(TRIGGER, HIGH);
   digitalWrite(LED_info, HIGH);
   now = millis();
   while (millis() < now + 600) {
-    tone(SPEAK, playTimed, 10);
+    tone(SPEAK, playTone, 10);
     if (millis() % 200 == 0) {
       //Serial.print(" ..emitting most frequent tone = ");
-      //Serial.print(playTimed);
+      //Serial.print(playTone);
     }
   }
   //Serial.println();
@@ -383,7 +385,7 @@ void lightLED() {
   //Serial.println(blue);
 }
 
-void positiveReaction(int playPos) {
+void positiveReaction(int playTone) {
   //light LED, then emit same as heard
   //Serial.println("######## APPROVE #######");
   now = millis();
@@ -400,7 +402,7 @@ void positiveReaction(int playPos) {
   digitalWrite(LED_info, HIGH);
   now = millis();
   while (millis() < now + 600) {
-    tone(SPEAK, playPos, 10);
+    tone(SPEAK, playTone, 10);
   }
   //Serial.println();
   digitalWrite(TRIGGER, LOW);
@@ -413,7 +415,7 @@ void positiveReaction(int playPos) {
   }
 }
 
-void negativeReaction(int playNeg, unsigned long wait) {
+void negativeReaction(int playTone, unsigned long wait) {
   //Serial.println("######## REJECT ########");
   //vibrate:
   now = millis();
@@ -433,7 +435,7 @@ void negativeReaction(int playNeg, unsigned long wait) {
   digitalWrite(LED_info, HIGH);
   now = millis();
   while (millis() < now + 600) {
-    tone(SPEAK, playNeg, 10);
+    tone(SPEAK, playTone, 10);
   }
   digitalWrite(TRIGGER, LOW);
   digitalWrite(LED_info, LOW);
@@ -494,34 +496,20 @@ void checkIncomingData(int incomingData) {
           }
           if (i == dbLength - 1) {
             //Serial.println("----------------end of database reached.----------------");
-//            //blink vibrator
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, LOW);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, LOW);
-//            }
-//            now = millis();
-//            while (millis() < now + 150) {
-//              digitalWrite(VIBR, HIGH);
-//            }
-//
-//            digitalWrite(VIBR, LOW);
+            now = millis();
+            while (millis() < now + 1000) {
+              for (int i = 0; i < 500; i++) {
+                digitalWrite(LED_info, HIGH);
+              }
+              for (int i = 0; i < 500; i++) {
+                digitalWrite(LED_info, LOW);
+              }
+            }
+            digitalWrite(LED_info, LOW);
             dbFull = true;
           }
         }
       }
-
 
       //full database: lower abundancy of lowest, overwrite if zero
       if (dbFull) {
