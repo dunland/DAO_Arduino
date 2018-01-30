@@ -1,10 +1,9 @@
 #include <elapsedMillis.h>
 
-/*OTHERING MACHINES v.1.22
-  RGB-LED lights up with sound
-  light represents abundancies of frequencies in db
-  long subsiding times after approve/reject/fillup
-  -> longer waitFactor = 1200
+/*OTHERING MACHINES v.2.0
+  adjustments and refinements after exhibition:
+  - positive response: database match/db[i] instead of stimulus/incomingData
+  - timedStatement: emit random instead most abundant
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -117,19 +116,19 @@ void setup() {
   digitalWrite(LED_R, LOW);
   now = 0;
   digitalWrite(LED_G, HIGH);
-    while (now < 150) {
+  while (now < 150) {
     //do nothing
   }
   digitalWrite(LED_G, LOW);
   now = 0;
   digitalWrite(LED_B, HIGH);
-    while (now < 150) {
+  while (now < 150) {
     //do nothing
   }
   digitalWrite(LED_B, LOW);
   now = 0;
   digitalWrite(LED_info, HIGH);
-    while (now < 150) {
+  while (now < 150) {
     //do nothing
   }
   digitalWrite(LED_info, LOW);
@@ -161,7 +160,7 @@ void setup() {
   }
   lightLED();
   now = 0;
-  while (now < 3000){
+  while (now < 3000) {
     //do nothing / light LED
   }
   unlightLED();
@@ -361,14 +360,15 @@ void doNothing(int waitingTime) {
 }
 
 void timedStatement() {
-  int highest = ab[0];
-  int highestIdx = 0;
-  for (int i = 0; i < dbLength; i++) {
-    if (ab[i] > highest) {
-      highestIdx = i;
-    }
-  }
-  int playTimed = db[highestIdx];
+  //  int highest = ab[0];
+  //  int highestIdx = 0;
+  //  for (int i = 0; i < dbLength; i++) {
+  //    if (ab[i] > highest) {
+  //      highestIdx = i;
+  //    }
+  //  }
+  //  int playTimed = db[highestIdx];
+  int playTimed = db[int(random(0, dbLength))];
   digitalWrite(TRIGGER, HIGH);
   lightLED();
   now = 0;
@@ -411,32 +411,35 @@ void unlightLED() {
 void positiveReaction(int playPos) {
   //light LED, then emit same as heard
   //Serial.println("######## APPROVE #######");
-  now = 0;
-  while (now < 1000) {
-    digitalWrite(LED_info, HIGH);
-  }
-  digitalWrite(LED_info, LOW);
-  doNothing(1000);
+  //  now = 0;
+  //  while (now < 1000) {
+  //    digitalWrite(LED_info, HIGH);
+  //  }
+  //  digitalWrite(LED_info, LOW);
+  lightLED();
+  doNothing(waitFactor);
 
   digitalWrite(TRIGGER, HIGH);
-  lightLED();
+  //lightLED();
   now = 0;
   while (now < 600) {
     tone(SPEAK, playPos, 10);
   }
   //Serial.println();
   digitalWrite(TRIGGER, LOW);
-  unlightLED();
+  //unlightLED();
 
   //subsiding time
+
   doNothing(10000);
+  unlightLED();
 }
 
 void negativeReaction(int playNeg, unsigned long wait) {
   //Serial.println("######## REJECT ########");
   //vibrate:
   now = 0;
-  while (now < 200){}
+  while (now < 200) {}
   now = 0;
   while (now < 1000) {
     digitalWrite(VIBR, HIGH);
@@ -446,30 +449,33 @@ void negativeReaction(int playNeg, unsigned long wait) {
   //waiting time
   //Serial.print("waiting time: ");
   //Serial.println(wait);
-  now = 0;
-  while (now < wait) {
-    if (millis() % 500 == 0) { //busy blinking in contrast to normal release times
-      digitalWrite(LED_info, ledState);
-      ledState = !ledState;
-      delay(10);
-    }
-  }
-  ledState = LOW;
-  digitalWrite(LED_info, LOW);
+  lightLED();
+  doNothing(wait);
+  //  now = 0;
+  //  while (now < wait) {
+  //    if (millis() % 500 == 0) { //busy blinking in contrast to normal release times
+  //      digitalWrite(LED_info, ledState);
+  //      ledState = !ledState;
+  //      delay(10);
+  //    }
+  //  }
+  //  ledState = LOW;
+  //  digitalWrite(LED_info, LOW);
 
   //play tone:
   digitalWrite(TRIGGER, HIGH);
-  lightLED();
+  //lightLED();
   now = 0;
   while (now < 600) {
     tone(SPEAK, playNeg, 10);
   }
   digitalWrite(TRIGGER, LOW);
-  unlightLED();
+  //unlightLED();
 
 
   //subsiding time
   doNothing(10000);
+  unlightLED();
 }
 
 
@@ -489,20 +495,20 @@ void checkIncomingData(int incomingData) {
           blueAb++;
         }
         dataExists = true;
-        positiveReaction(incomingData);
+        positiveReaction(db[i]);
         break;
       }
     }
 
     //data does not exist:
     if (!dataExists) {
-      if (!dbFull) {
+      if (!dbFull) {                                        //data will be added
         //Serial.println("######### db fillup ########");
         //search 0 in database:
         for (int i = 0; i < dbLength; i++) {
           if (db[i] == 0) {
             db[i] = incomingData;
-            ab[i]++;
+            ab[i]++;                                        //increase abundancy
             abTot++;
             if (incomingData >= 300 && incomingData < 1000) {
               redAb++;
@@ -544,7 +550,7 @@ void checkIncomingData(int incomingData) {
         }
       }
 
-
+      //data does not exist,
       //full database: lower abundancy of lowest, overwrite if zero
       if (dbFull) {
         int lowest = ab[0];
@@ -573,8 +579,8 @@ void checkIncomingData(int incomingData) {
           //Serial.print(incomingData);
           //Serial.println(" added");
 
-          //increase abundancy
           db[lowestIdx] = incomingData;
+          //increase abundancy
           ab[lowestIdx] = 1;
           abTot++;
           if (incomingData >= 300 && incomingData < 1000) {
@@ -646,12 +652,14 @@ void checkIncomingData(int incomingData) {
 void loop() {
 
   checkClipping();
+  digitalWrite(LED_info, HIGH);
 
   if (millis() % (waitFactor) <= 300) {
     timedStatement();
   }
 
   if (checkMaxAmp > ampThreshold) {
+    digitalWrite(LED_info, LOW);
     for (int i = 0; i < medianLength; i++) {
       frequency = 38462 / float(period); //calculate frequency timer rate/period
       median[i] = frequency;

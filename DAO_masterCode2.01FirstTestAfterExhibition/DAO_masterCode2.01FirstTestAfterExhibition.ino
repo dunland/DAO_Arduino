@@ -1,10 +1,12 @@
 #include <elapsedMillis.h>
 
-/*OTHERING MACHINES v.1.22
-  RGB-LED lights up with sound
-  light represents abundancies of frequencies in db
-  long subsiding times after approve/reject/fillup
-  -> longer waitFactor = 1200
+/*OTHERING MACHINES v.2.01
+  adjustments and refinements after exhibition:
+  - positive response: database match/db[i] instead of stimulus/incomingData
+  - timedStatement: emit random instead most abundant
+  - lightLED constantly while waiting (no more blinking)
+  - dbLength = 3, db filled completely
+  - dbfillup deactivated
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -52,11 +54,11 @@ float abTot = 0; //total abundancy of frequencies in db
 boolean ledState = LOW;
 
 //database variables
-const int dbLength = 6;
+const int dbLength = 3;
 int db[dbLength];
 int ab[dbLength];
 boolean dataExists = false;
-boolean dbFull = false;
+//boolean dbFull = false;
 
 //clipping indicator variables
 boolean clipping = 0;
@@ -89,7 +91,7 @@ unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
 byte ampThreshold = 40;//raise if you have a very noisy signal
-byte midpoint = 175;
+byte midpoint = 153;
 
 void setup() {
 
@@ -117,19 +119,19 @@ void setup() {
   digitalWrite(LED_R, LOW);
   now = 0;
   digitalWrite(LED_G, HIGH);
-    while (now < 150) {
+  while (now < 150) {
     //do nothing
   }
   digitalWrite(LED_G, LOW);
   now = 0;
   digitalWrite(LED_B, HIGH);
-    while (now < 150) {
+  while (now < 150) {
     //do nothing
   }
   digitalWrite(LED_B, LOW);
   now = 0;
   digitalWrite(LED_info, HIGH);
-    while (now < 150) {
+  while (now < 150) {
     //do nothing
   }
   digitalWrite(LED_info, LOW);
@@ -142,26 +144,28 @@ void setup() {
 
   //fill and print database
   //Serial.print("initial dB entry = ");
-  float rndm;
-  //generate single random entry dividable by 20
-  rndm = random(300, 2401);
-  while (int(rndm) % 20 != 0) {
-    rndm++;
-  }
-  db[0] = rndm;
-  //Serial.println(db[0]);
-  ab[0] = 1;
-  abTot = 1;
-  if (rndm >= 300 && rndm < 1000) {
-    redAb++;
-  } else if (rndm >= 1000 && rndm < 1700) {
-    greenAb++;
-  } else if (rndm >= 1700 && rndm < 2401) {
-    blueAb++;
+  for (int i = 0; i < dbLength; i++) {
+    float rndm;
+    //generate single random entry dividable by 20
+    rndm = random(300, 2401);
+    while (int(rndm) % 20 != 0) {
+      rndm++;
+    }
+    db[i] = rndm;
+    //Serial.println(db[0]);
+    ab[i] = 1;
+    abTot = 1;
+    if (rndm >= 300 && rndm < 1000) {
+      redAb++;
+    } else if (rndm >= 1000 && rndm < 1700) {
+      greenAb++;
+    } else if (rndm >= 1700 && rndm < 2401) {
+      blueAb++;
+    }
   }
   lightLED();
   now = 0;
-  while (now < 3000){
+  while (now < 3000) {
     //do nothing / light LED
   }
   unlightLED();
@@ -352,23 +356,24 @@ void doNothing(int waitingTime) {
   //Serial.print("do nothing: ");
   //Serial.println(waitingTime);
   while (now < waitingTime) {
-    if (millis() % 350 == 0) {
-      digitalWrite(LED_info, HIGH);
-      delay(50);
-      digitalWrite(LED_info, LOW);
-    }
+    //    if (millis() % 350 == 0) {
+    //      digitalWrite(LED_info, HIGH);
+    //      delay(50);
+    //      digitalWrite(LED_info, LOW);
+    //    }
   }
 }
 
 void timedStatement() {
-  int highest = ab[0];
-  int highestIdx = 0;
-  for (int i = 0; i < dbLength; i++) {
-    if (ab[i] > highest) {
-      highestIdx = i;
-    }
-  }
-  int playTimed = db[highestIdx];
+  //  int highest = ab[0];
+  //  int highestIdx = 0;
+  //  for (int i = 0; i < dbLength; i++) {
+  //    if (ab[i] > highest) {
+  //      highestIdx = i;
+  //    }
+  //  }
+  //  int playTimed = db[highestIdx];
+  int playTimed = db[int(random(0, dbLength))];
   digitalWrite(TRIGGER, HIGH);
   lightLED();
   now = 0;
@@ -411,32 +416,36 @@ void unlightLED() {
 void positiveReaction(int playPos) {
   //light LED, then emit same as heard
   //Serial.println("######## APPROVE #######");
-  now = 0;
-  while (now < 1000) {
-    digitalWrite(LED_info, HIGH);
-  }
-  digitalWrite(LED_info, LOW);
-  doNothing(1000);
-
-  digitalWrite(TRIGGER, HIGH);
+  //  now = 0;
+  //  while (now < 1000) {
+  //    digitalWrite(LED_info, HIGH);
+  //  }
+  //  digitalWrite(LED_info, LOW);
   lightLED();
+  doNothing(waitFactor);
+  unlightLED();
+  digitalWrite(TRIGGER, HIGH);
+  //lightLED();
   now = 0;
   while (now < 600) {
     tone(SPEAK, playPos, 10);
   }
   //Serial.println();
   digitalWrite(TRIGGER, LOW);
-  unlightLED();
+  //unlightLED();
 
   //subsiding time
+
+  lightLED();
   doNothing(10000);
+  unlightLED();
 }
 
 void negativeReaction(int playNeg, unsigned long wait) {
   //Serial.println("######## REJECT ########");
   //vibrate:
   now = 0;
-  while (now < 200){}
+  while (now < 200) {}
   now = 0;
   while (now < 1000) {
     digitalWrite(VIBR, HIGH);
@@ -446,30 +455,35 @@ void negativeReaction(int playNeg, unsigned long wait) {
   //waiting time
   //Serial.print("waiting time: ");
   //Serial.println(wait);
-  now = 0;
-  while (now < wait) {
-    if (millis() % 500 == 0) { //busy blinking in contrast to normal release times
-      digitalWrite(LED_info, ledState);
-      ledState = !ledState;
-      delay(10);
-    }
-  }
-  ledState = LOW;
-  digitalWrite(LED_info, LOW);
+  lightLED();
+  doNothing(wait);
+  //  now = 0;
+  //  while (now < wait) {
+  //    if (millis() % 500 == 0) { //busy blinking in contrast to normal release times
+  //      digitalWrite(LED_info, ledState);
+  //      ledState = !ledState;
+  //      delay(10);
+  //    }
+  //  }
+  //  ledState = LOW;
+  //  digitalWrite(LED_info, LOW);
 
   //play tone:
+  unlightLED();
   digitalWrite(TRIGGER, HIGH);
-  lightLED();
+  //lightLED();
   now = 0;
   while (now < 600) {
     tone(SPEAK, playNeg, 10);
   }
   digitalWrite(TRIGGER, LOW);
-  unlightLED();
+  //unlightLED();
 
 
   //subsiding time
+  lightLED();
   doNothing(10000);
+  unlightLED();
 }
 
 
@@ -489,163 +503,166 @@ void checkIncomingData(int incomingData) {
           blueAb++;
         }
         dataExists = true;
-        positiveReaction(incomingData);
+        positiveReaction(db[i]);
         break;
       }
     }
 
     //data does not exist:
     if (!dataExists) {
-      if (!dbFull) {
-        //Serial.println("######### db fillup ########");
-        //search 0 in database:
-        for (int i = 0; i < dbLength; i++) {
-          if (db[i] == 0) {
-            db[i] = incomingData;
-            ab[i]++;
-            abTot++;
-            if (incomingData >= 300 && incomingData < 1000) {
-              redAb++;
-              digitalWrite(LED_R, HIGH);
-            } else if (incomingData >= 1000 && incomingData < 1700) {
-              greenAb++;
-              digitalWrite(LED_G, HIGH);
-            } else if (incomingData >= 1700 && incomingData < 2401) {
-              blueAb++;
-              digitalWrite(LED_B, HIGH);
-            }
+      //      if (!dbFull) {                                        //data will be added
+      //        //Serial.println("######### db fillup ########");
+      //        //search 0 in database:
+      //        for (int i = 0; i < dbLength; i++) {
+      //          if (db[i] == 0) {
+      //            db[i] = incomingData;
+      //            ab[i]++;                                        //increase abundancy
+      //            abTot++;
+      //            if (incomingData >= 300 && incomingData < 1000) {
+      //              redAb++;
+      //              digitalWrite(LED_R, HIGH);
+      //            } else if (incomingData >= 1000 && incomingData < 1700) {
+      //              greenAb++;
+      //              digitalWrite(LED_G, HIGH);
+      //            } else if (incomingData >= 1700 && incomingData < 2401) {
+      //              blueAb++;
+      //              digitalWrite(LED_B, HIGH);
+      //            }
+      //
+      //            doNothing(250);
+      //            unlightLED();
+      //
+      //            //subsiding time
+      //            doNothing(5000);
+      //
+      //            break;
+      //          }
+      //
+      //          //check if database == full
+      //          if (i == dbLength - 1) {
+      //            //Serial.println("----------------end of database reached.----------------");
+      //            //blink LED fast
+      //            now = 0;
+      //            while (now < 2000) {
+      //              if (millis() % 25 == 0) {
+      //                digitalWrite(LED_info, ledState);
+      //                ledState = !ledState;
+      //                delay(10);
+      //              }
+      //            }
+      //            ledState = LOW;
+      //            digitalWrite(LED_info, LOW);
+      //
+      //            dbFull = true;
+      //          }
+      //        }
+      //      }
 
-            doNothing(250);
-            unlightLED();
-
-            //subsiding time
-            doNothing(5000);
-
-            break;
-          }
-
-          //check if database == full
-          if (i == dbLength - 1) {
-            //Serial.println("----------------end of database reached.----------------");
-            //blink LED fast
-            now = 0;
-            while (now < 2000) {
-              if (millis() % 25 == 0) {
-                digitalWrite(LED_info, ledState);
-                ledState = !ledState;
-                delay(10);
-              }
-            }
-            ledState = LOW;
-            digitalWrite(LED_info, LOW);
-
-            dbFull = true;
-          }
-        }
-      }
-
-
+      //data does not exist,
       //full database: lower abundancy of lowest, overwrite if zero
-      if (dbFull) {
-        int lowest = ab[0];
-        int lowestIdx = 0;
-        for (int i = 0; i < dbLength; i++) {
-          if (ab[i] < lowest) {
-            lowest = ab[i];
-            lowestIdx = i;
-          }
-        }
-        //lower abundancy
-        ab[lowestIdx]--;
-        abTot--;
-        if (incomingData >= 300 && incomingData < 1000) {
-          redAb--;
-        } else if (incomingData >= 1000 && incomingData < 1700) {
-          greenAb--;
-        } else if (incomingData >= 1700 && incomingData < 2401) {
-          blueAb--;
-        }
-
-        //if abundancy = 0, add data
-        if (ab[lowestIdx] == 0) {
-          //Serial.print(db[lowestIdx]);
-          //Serial.print(" dropped, ");
-          //Serial.print(incomingData);
-          //Serial.println(" added");
-
-          //increase abundancy
-          db[lowestIdx] = incomingData;
-          ab[lowestIdx] = 1;
-          abTot++;
-          if (incomingData >= 300 && incomingData < 1000) {
-            redAb++;
-          } else if (incomingData >= 1000 && incomingData < 1700) {
-            greenAb++;
-          } else if (incomingData >= 1700 && incomingData < 2401) {
-            blueAb++;
-          }
-
-          //pick closest entry from db and respond
-          sortDatabase(db, dbLength);
-          unsigned int wait = 0;
-          int closest = 0;
-
-          if (lowestIdx == 0) {
-            //entry at start: wait dist
-            wait = (db[lowestIdx + 1] - db[lowestIdx]) * respondFactor;
-            closest = db[lowestIdx + 1];
-            //Serial.print("entry at 0, wait = ");
-            //Serial.println(wait);
-          } else if (lowestIdx == dbLength - 1) {
-            wait = (db[lowestIdx] - db[lowestIdx - 1]) * respondFactor;
-            closest = db[dbLength - 2];
-            //Serial.print("entry at end, wait = ");
-            //Serial.println(wait);
-            //entry at end: wait dist
-          } else {
-            //middle: calc diff, wait dist
-            if (db[lowestIdx] - db[lowestIdx - 1] < db[lowestIdx + 1] - db[lowestIdx]) {
-              wait = (db[lowestIdx] - db[lowestIdx - 1]) * respondFactor;
-              closest = db[lowestIdx - 1];
-              //Serial.print(db[lowestIdx]);
-              //Serial.print(" - ");
-              //Serial.print(db[lowestIdx - 1]);
-              //Serial.print(" < ");
-              //Serial.print(db[lowestIdx + 1]);
-              //Serial.print(" - ");
-              //Serial.print(db[lowestIdx]);
-              //Serial.print(", difference/wait = ");
-              //Serial.println(wait);
-            } else {
-              wait = (db[lowestIdx + 1] - db[lowestIdx]) * respondFactor;
-              closest = db[lowestIdx + 1];
-              //Serial.print(db[lowestIdx]);
-              //Serial.print(" - ");
-              //Serial.print(db[lowestIdx - 1]);
-              //Serial.print(" > ");
-              //Serial.print(db[lowestIdx + 1]);
-              //Serial.print(" - ");
-              //Serial.print(db[lowestIdx]);
-              //Serial.print(", difference/wait = ");
-              //Serial.println(wait);
-            }
-          }
-          //Serial.print("closest sound = ");
-          //Serial.println(closest);
-          negativeReaction(closest, wait);
+      //if (dbFull) {
+      int lowest = ab[0];
+      int lowestIdx = 0;
+      for (int i = 0; i < dbLength; i++) {
+        if (ab[i] < lowest) {
+          lowest = ab[i];
+          lowestIdx = i;
         }
       }
+      //lower abundancy
+      ab[lowestIdx]--;
+      abTot--;
+      if (incomingData >= 300 && incomingData < 1000) {
+        redAb--;
+      } else if (incomingData >= 1000 && incomingData < 1700) {
+        greenAb--;
+      } else if (incomingData >= 1700 && incomingData < 2401) {
+        blueAb--;
+      }
+
+      //if abundancy = 0, replace data
+      if (ab[lowestIdx] == 0) {
+        //Serial.print(db[lowestIdx]);
+        //Serial.print(" dropped, ");
+        //Serial.print(incomingData);
+        //Serial.println(" added");
+
+        db[lowestIdx] = incomingData;
+        //increase abundancy
+        ab[lowestIdx] = 1;
+        abTot++;
+        if (incomingData >= 300 && incomingData < 1000) {
+          redAb++;
+        } else if (incomingData >= 1000 && incomingData < 1700) {
+          greenAb++;
+        } else if (incomingData >= 1700 && incomingData < 2401) {
+          blueAb++;
+        }
+      }
+
+      //pick closest entry from db and respond
+      sortDatabase(db, dbLength);
+      unsigned int wait = 0;
+      int closest = 0;
+
+      if (lowestIdx == 0) {
+        //entry at start: wait dist
+        wait = (db[lowestIdx + 1] - db[lowestIdx]) * respondFactor;
+        closest = db[lowestIdx + 1];
+        //Serial.print("entry at 0, wait = ");
+        //Serial.println(wait);
+      } else if (lowestIdx == dbLength - 1) {
+        wait = (db[lowestIdx] - db[lowestIdx - 1]) * respondFactor;
+        closest = db[dbLength - 2];
+        //Serial.print("entry at end, wait = ");
+        //Serial.println(wait);
+        //entry at end: wait dist
+      } else {
+        //middle: calc diff, wait dist
+        if (db[lowestIdx] - db[lowestIdx - 1] < db[lowestIdx + 1] - db[lowestIdx]) {
+          wait = (db[lowestIdx] - db[lowestIdx - 1]) * respondFactor;
+          closest = db[lowestIdx - 1];
+          //Serial.print(db[lowestIdx]);
+          //Serial.print(" - ");
+          //Serial.print(db[lowestIdx - 1]);
+          //Serial.print(" < ");
+          //Serial.print(db[lowestIdx + 1]);
+          //Serial.print(" - ");
+          //Serial.print(db[lowestIdx]);
+          //Serial.print(", difference/wait = ");
+          //Serial.println(wait);
+        } else {
+          wait = (db[lowestIdx + 1] - db[lowestIdx]) * respondFactor;
+          closest = db[lowestIdx + 1];
+          //Serial.print(db[lowestIdx]);
+          //Serial.print(" - ");
+          //Serial.print(db[lowestIdx - 1]);
+          //Serial.print(" > ");
+          //Serial.print(db[lowestIdx + 1]);
+          //Serial.print(" - ");
+          //Serial.print(db[lowestIdx]);
+          //Serial.print(", difference/wait = ");
+          //Serial.println(wait);
+        }
+      }
+      //Serial.print("closest sound = ");
+      //Serial.println(closest);
+      negativeReaction(closest, wait);
     }
+    //}
+
     //Serial.println();
     //printDatabase();
   } else {
     //Serial.println("incomingData out of range");
   }
+  digitalWrite(LED_info, HIGH);
 }
 
 void loop() {
 
   checkClipping();
+  unlightLED();
 
   if (millis() % (waitFactor) <= 300) {
     timedStatement();
@@ -665,6 +682,7 @@ void loop() {
     //Serial.println(median[4]);
     dataExists = false;
     listen = false;
+    digitalWrite(LED_info, LOW);
     checkIncomingData(median[4]);
 
     //reset all values to avoid self-recording:
