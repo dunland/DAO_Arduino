@@ -14,6 +14,7 @@
 
 //clipping indicator variables
 boolean clipping = 0;
+boolean listen = true;
 
 //data storage variables
 byte newData = 0;
@@ -74,6 +75,7 @@ void setup() {
 }
 
 ISR(ADC_vect) {//when new ADC value ready
+  if (listen){
 
   PORTB &= B11101111;//set pin 12 low
   prevData = newData;//store previous value
@@ -141,7 +143,7 @@ ISR(ADC_vect) {//when new ADC value ready
     checkMaxAmp = maxAmp;
     maxAmp = 0;
   }
-
+  }
 }
 
 void reset() { //clea out some variables
@@ -188,13 +190,21 @@ void loop() {
     //print results
     //Serial.print(frequency);
     //Serial.println(" hz");
-    if (median >= 100)
-    {
-      Serial.print("median: ");
-      Serial.println(median[4]);
-    }
+    Serial.print("median: ");
+    Serial.println(median[4]);
   }
-
+  delay(1000);
+  if (median[4]>=100){
+    listen = false;
+    delay(100);
+    tone(7,median[4],500);
+  }
+  for (int i; i<medianLength; i++)
+  {
+    median[i] = 0;
+  }
+  delay(1000);
+  listen = true;
 
   delay(100);//delete this if you want
 
