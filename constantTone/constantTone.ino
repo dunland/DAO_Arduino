@@ -7,7 +7,7 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  tone(7,note);
+  tone(8,note);
   delay(2000);
   note += 100;
   if (note >= 3000)

@@ -1,0 +1,15 @@
+22:44 12.12.2018
+Farben wurden ermittelt durch ausprobieren der Anteile und anschließendem ästhetischem Ermessen
+Farbübergänge sind kritisch besonders im anfänglichen Bereich der Mischungen
+
+#	cnt	tol	20	50	70	90	120	R	B	G
+1	150	25	x	x	x	x	x	1	0	0
+2	200	25	x	x	x	x	x	0.9	0.1	0
+3	300	50	x	x	x	x	x	0.5	0.5	0
+4	500	200	x	x	x	x	x	0.2	0.8	0
+5	800	300	x	x	x	x	x	0	1	0
+6	1200	400	x	x	x	x	x	0	0.9	0.1
+7	1600	400	x	x	x	x	x	0	0.7	0.3
+8	2000	500	x	x	x	x	x	0	0.5	0.5
+9	2500	500	x	x	x	x	x	0	0.2	0.8
+10	3000	500	x	x	x	x	x	0	0	1

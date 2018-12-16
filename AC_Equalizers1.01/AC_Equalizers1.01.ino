@@ -10,6 +10,12 @@
    (at your option) any later version.
 
 */
+#include <elapsedMillis.h>
+elapsedMillis now = 0;
+const int LED_info = 5;
+const int LED_R = 6;
+const int LED_G = 10;
+const int LED_B = 9;
 
 
 //clipping indicator variables
@@ -37,7 +43,7 @@ int timerTol = 10;//timer tolerance- adjust this if you need
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
-byte ampThreshold = 40;//raise if you have a very noisy signal
+byte ampThreshold = 50;//raise if you have a very noisy signal
 byte midpoint = 125;
 
 //smoothing data
@@ -50,8 +56,10 @@ void setup() {
 
   Serial.begin(9600);
 
-  pinMode(13, OUTPUT); //led indicator pin
-  pinMode(12, OUTPUT); //output pin
+  pinMode(LED_info, OUTPUT);
+  pinMode(LED_R, OUTPUT);
+  pinMode(LED_G, OUTPUT);
+  pinMode(LED_B, OUTPUT);
 
   cli();//diable interrupts
 
@@ -174,31 +182,40 @@ void loop() {
 
   checkClipping();
 
-  if (checkMaxAmp > ampThreshold) {
-    for (int i = 0; i < medianLength; i++) {
-      frequency = 38462 / float(period); //calculate frequency timer rate/period
+  //if (checkMaxAmp > ampThreshold) {
+  for (int i = 0; i < medianLength; i++) {
+    frequency = 38462 / float(period); //calculate frequency timer rate/period
 
-      median[i] = frequency;
-      delay(10);
-
-      sortFloat(median, medianLength);
-    }
+    median[i] = frequency;
 
 
-    //print results
-    //Serial.print(frequency);
-    //Serial.println(" hz");
-    if (median >= 100)
-    {
-      Serial.print("median: ");
-      Serial.println(median[4]);
-    }
+    sortFloat(median, medianLength);
+    //}
+  }
+  if (median[4] > 100)
+  {
+    float red = (median[4] - 750) * 255 / 750;
+    float green = (median[4] - 1500) * 255 / 750;
+    float blue = (median[4] - 2250) * 255 / 750;
+
+    now = 0;
+    analogWrite(LED_R, min(255, abs(red)));
+    analogWrite(LED_G, min(255, abs(green)));
+    analogWrite(LED_B, min(255, abs(blue)));
+
   }
 
-
-  delay(100);//delete this if you want
-
-  //do other stuff here
+  if (now > 20)
+  {
+    analogWrite(LED_R, 255);
+    analogWrite(LED_G, 255);
+    analogWrite(LED_B, 255);
+    frequency = 0;
+    for (int i = 0; i<medianLength; i++)
+    {
+      median[i] = 0;
+    }
+  }
 }
 
 

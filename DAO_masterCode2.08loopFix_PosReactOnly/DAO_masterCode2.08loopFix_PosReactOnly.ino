@@ -1,11 +1,19 @@
 #include <elapsedMillis.h>
 
-/*OTHERING MACHINES v.2.07
- 19.10.2018
- * Signalübertragung für erste 9 Geräte:
- * zuvor mit Processing simuliert, subsiding times ermittelt 
- * new blinking and subsidal modes implemented
- * Voltages need to be checked and translated to 8-bit
+/*OTHERING MACHINES v.2.08 TEST VERSION
+  10.11.2018
+  self-referential looping bug fixed by implementing boolean periodFound
+  shorter waitingTime
+  shorter subsideAfterReaction
+  
+  * cli() and sei() in ISR removed
+  
+
+  to test: beste Ansprache zw. 44 und 55
+  to do: Helligkeit von Blinken bei subside fixen
+
+   Voltages need to be checked and translated to 8-bit
+   CHECK FOR TESTS WETHER BATTERY OR USB POWERED! might have an influence on voltage/sensitivity
 
    for the course 'Digital Artifactual Objections' held in the summer term 2017 at HfK Bremen
    by David Unland
@@ -27,21 +35,34 @@
    for sensitivity/realiability adjustments, alter slopeTol, timerTol, ampThreshold
 */
 
-//OUTPUT PINS:
+
+//--------------------------------------variables for decision whether you have a match
+byte noMatch = 0;//counts how many non-matches you've received to reset variables if it's been too long
+byte slopeTol = 3;//slope tolerance- higher for steep waves
+int timerTol = 15;//timer tolerance- low for complicated waves/higher resolution
+
+//---------------------------------------variables for amp detection
+unsigned int ampTimer = 0;
+byte maxAmp = 0;
+byte checkMaxAmp;
+byte ampThreshold = 50;//raise if you have a very noisy signal
+byte midpoint = 125;
+
+
+//------------------------------------OUTPUT PINS:
 const int LED_info = 5;
 const int LED_R = 6;
 const int LED_G = 10;
 const int LED_B = 9;
 const int VIBR = 3;
-//const int TRIGGER = 8;
 const int SPEAK = 8;
 
-//reaction and behavior
+//------------------------------------reaction and behavior
 elapsedMillis now = 0;
 int freqTol = 50;
 unsigned long respondFactor; //will be declared after randomSeed is set
 unsigned long waitFactor; //will be declared after randomSeed is set
-boolean listen = true;
+volatile boolean listen = true;
 //LED intensity
 float red;
 float green;
@@ -51,19 +72,19 @@ float blueAb = 0;
 float greenAb = 0;
 float abTot = 0; //total abundancy of frequencies in database
 boolean ledState = LOW;
-int subsideAfterReaction = 20000;
+//int subsideAfterReaction = 20000;
+int subsideAfterReaction = 5000;
 
-//database variables
+//------------------------------------database variables
 const int dbLength = 3;
 int db[dbLength];
 int ab[dbLength];
 boolean dataExists = false;
-//boolean dbFull = false;
 
-//clipping indicator variables
+//------------------------------------clipping indicator variables
 boolean clipping = 0;
 
-//data storage variables
+//------------------------------------data storage variables
 byte newData = 0;
 byte prevData = 0;
 unsigned int time = 0;//keeps time and sends values to store in timer[] occasionally
@@ -75,42 +96,28 @@ byte index = 0;//current storage index
 float frequency;//storage for frequency calculations
 int maxSlope = 0;//used to calculate max slope as trigger point
 int newSlope;//storage for incoming slope data
+boolean periodFound = false;
 
-//smoothing data
+////------------------------------------smoothing data
 const int medianLength = 9;
 float median[medianLength];
-
-
-//-----------------------------------------------variables for decision whether you have a match
-byte noMatch = 0;//counts how many non-matches you've received to reset variables if it's been too long
-byte slopeTol = 255;//slope tolerance- higher for steep waves
-int timerTol = 5;//timer tolerance- low for complicated waves/higher resolution
-
-//-----------------------------------------------variables for amp detection
-unsigned int ampTimer = 0;
-byte maxAmp = 0;
-byte checkMaxAmp;
-byte ampThreshold = 154;//raise if you have a very noisy signal
-byte midpoint = 126;
-
-
 
 
 //-------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------SETUP---------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------
-void setup() 
+void setup()
 {
   //-----------------------------------------------waiting time and pinout
   //Serial.begin(115200);
   randomSeed(analogRead(0));
   respondFactor = random(100, 201); //that is a factor of 0.1 to 0.2 seconds
-  waitFactor = respondFactor * 600; //time to pass before timedStatement
+  //waitFactor = respondFactor * 600; //time to pass before timedStatement
+  waitFactor = respondFactor * 100; //time to pass before timedStatement
 
   pinMode(13, OUTPUT); //led indicator pin
   pinMode(12, OUTPUT); //output pin
   pinMode(SPEAK, OUTPUT); //speaker tone out
-  //pinMode(TRIGGER, OUTPUT); //speaker transistor trigger
   pinMode(LED_info, OUTPUT);
   pinMode(LED_R, OUTPUT);
   pinMode(LED_G, OUTPUT);
@@ -172,12 +179,12 @@ void setup()
       blueAb++;
     }
   }
-  lightLED();
+  lightRGB();
   now = 0;
   while (now < 3000) {
     //do nothing / light LED
   }
-  unlightLED();
+  unlightRGB();
 
 
 
@@ -209,9 +216,9 @@ void setup()
 
 
 
-//------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------INTERRUPTS---------------------------------------------------------
-//------------------------------------------------------------------------------------------------------------------
+  //------------------------------------------------------------------------------------------------------------------
+  //-----------------------------------------------INTERRUPTS---------------------------------------------------------
+  //------------------------------------------------------------------------------------------------------------------
   cli();//diable interrupts
 
   //set up continuous sampling of analog pin 0 at 38.5kHz
@@ -234,9 +241,10 @@ void setup()
 
 ISR(ADC_vect) {//when new ADC value ready
 
-  cli();
   if (listen) {
-    PORTB &= B11101111;//set pin 12 low
+
+    PORTD |= B00100000; //set pin 5 high
+    //PORTB &= B11101111;//set pin 12 low
     prevData = newData;//store previous value
     newData = ADCH;//get value from A0
     if (prevData < midpoint && newData >= midpoint) { //if increasing and crossing midpoint
@@ -247,7 +255,7 @@ ISR(ADC_vect) {//when new ADC value ready
         timer[index] = time;
         time = 0;
         if (index == 0) { //new max slope just reset
-          PORTB |= B00010000;//set pin 12 high
+          //PORTB |= B00010000;//set pin 12 high
           noMatch = 0;
           index++;//increment index
         }
@@ -258,11 +266,12 @@ ISR(ADC_vect) {//when new ADC value ready
             totalTimer += timer[i];
           }
           period = totalTimer;//set period
+          periodFound = true;
           //reset new zero index values to compare with
           timer[0] = timer[index];
           slope[0] = slope[index];
           index = 1;//set index to 1
-          PORTB |= B00010000;//set pin 12 high
+          //PORTB |= B00010000;//set pin 12 high
           noMatch = 0;
         }
         else { //crossing midpoint but not match
@@ -286,10 +295,10 @@ ISR(ADC_vect) {//when new ADC value ready
       }
     }
 
-    if (newData == 0 || newData == 1023) { //if clipping
-      PORTB |= B00100000;//set pin 13 high- turn on clipping indicator led
-      clipping = 1;//currently clipping
-    }
+    //    if (newData == 0 || newData == 1023) { //if clipping
+    //      //PORTB |= B00100000;//set pin 13 high- turn on clipping indicator led
+    //      clipping = 1;//currently clipping
+    //    }
 
     time++;//increment timer at rate of 38.5kHz
 
@@ -298,15 +307,14 @@ ISR(ADC_vect) {//when new ADC value ready
     if (abs(midpoint - ADCH) > maxAmp) {
       maxAmp = abs(midpoint - ADCH);
     }
-    if (ampTimer == 7600) {
+    if (ampTimer == 1000) {
       //Serial.println("ampTimer refreshed");
       ampTimer = 0;
       checkMaxAmp = maxAmp;
       maxAmp = 0;
+      periodFound = false;
     }
-
   }
-  sei();
 }
 //------------------------------------------------------------------------------------------------------------------
 //------------------------------------------------FUNCTIONS---------------------------------------------------------
@@ -319,15 +327,18 @@ void reset() { //clear out some variables
   index = 0;//reset index
   noMatch = 0;//reset match counter
   maxSlope = 0;//reset slope
+  time = 0;
+  checkMaxAmp = 0;
+  maxAmp = 0;
 }
 
 
-void checkClipping() { //manage clipping indicator LED
-  if (clipping) { //if currently clipping
-    PORTB &= B11011111;//turn off clipping indicator led
-    clipping = 0;
-  }
-}
+//void checkClipping() { //manage clipping indicator LED
+//  if (clipping) { //if currently clipping
+//    PORTB &= B11011111;//turn off clipping indicator led
+//    clipping = 0;
+//  }
+//}
 
 
 //-----------------------------------------------sortFloat
@@ -344,16 +355,16 @@ void sortFloat(float a[], int size) {
 }
 
 //void printDatabase() {
-  //for (int i = 0; i < dbLength; i++) {
-  //Serial.print(db[i]);
-  //Serial.print(" | ");
-  //}
-  //Serial.println();
-  //for (int i = 0; i < dbLength; i++) {
-  //Serial.print(ab[i]);
-  //Serial.print(" | ");
-  //}
-  //Serial.println();
+//for (int i = 0; i < dbLength; i++) {
+//Serial.print(db[i]);
+//Serial.print(" | ");
+//}
+//Serial.println();
+//for (int i = 0; i < dbLength; i++) {
+//Serial.print(ab[i]);
+//Serial.print(" | ");
+//}
+//Serial.println();
 //}
 
 
@@ -388,36 +399,53 @@ void doNothing(unsigned long waitingTime) {
   }
 }
 
+//-----------------------------------------------do Nothing
+void subside(unsigned long waitingTime) {
+  now = 0;
+  boolean blinky = false;
+  while (now < waitingTime)
+  {
+    if (now % 2000 == 0)
+    {
+      if (blinky)
+      {
+        //digitalWrite(LED_info, HIGH);
+        digitalWrite(LED_info, HIGH);
+        delay(500);
+        digitalWrite(LED_info, LOW);
+        blinky = false;
+      } else
+      {
+        blinky = true;
+      }
+    }
+  }
+  digitalWrite(LED_info, LOW);
+}
+
 //-----------------------------------------------timed sound emission
+//1. play (random from database) and light RGB
+//2. wait 4s
 void timedStatement() {
-  //  int highest = ab[0];
-  //  int highestIdx = 0;
-  //  for (int i = 0; i < dbLength; i++) {
-  //    if (ab[i] > highest) {
-  //      highestIdx = i;
-  //    }
-  //  }
-  //  int playTimed = db[highestIdx];
   int playTimed = db[int(random(0, dbLength))];
-  //digitalWrite(TRIGGER, HIGH);
-  lightLED();
+  lightRGB();
   now = 0;
   while (now < 600) {
     tone(SPEAK, playTimed, 10);
-    if (millis() % 200 == 0) {
-      //Serial.print(" ..emitting most frequent tone = ");
-      //Serial.print(playTimed);
-    }
+    //if (millis() % 200 == 0) {
+    //Serial.print(" ..emitting most frequent tone = ");
+    //Serial.print(playTimed);
+    //}
   }
+  //reset();
   //Serial.println();
-  //digitalWrite(TRIGGER, LOW);
-  unlightLED();
-  doNothing(4000);
+  unlightRGB();
+  doNothing(4000); //this is used to avoid self-referential loop?
 }
 
 //-----------------------------------------------Light LED:
 //lights up each R,G,B with respect to their abundancies
-void lightLED() 
+void lightRGB()
 {
   //set RGB_LED
   red = (redAb / abTot) * 255;
@@ -437,7 +465,7 @@ void lightLED()
 
 //-----------------------------------------------Unlight LED
 //sets all colors to 0
-void unlightLED() {
+void unlightRGB() {
   pinMode(LED_R, INPUT);
   pinMode(LED_G, INPUT);
   pinMode(LED_B, INPUT);
@@ -447,24 +475,27 @@ void unlightLED() {
 }
 
 //-----------------------------------------------positive Reaction
-//lights RGB-LED until waiting time exceeded, 
+//lights RGB-LED until waiting time exceeded,
 //then emits same as heard
 //subsiding: no lights
-void positiveReaction(int playPos) 
+void positiveReaction(int playPos)
 {
-  lightLED();
-  doNothing(waitFactor);
-  unlightLED();
+  lightRGB();
+  //doNothing(waitFactor);
+  doNothing(3000);
+  unlightRGB();
 
   now = 0;
   while (now < 600) {
     tone(SPEAK, playPos, 10);
   }
-  
+  //reset();
+
   //subsiding time
-  //lightLED();
-  doNothing(subsideAfterReaction);
-  //unlightLED();
+  //lightRGB();
+  //doNothing(subsideAfterReaction);
+  subside(subsideAfterReaction);
+  //unlightRGB();
 }
 
 //-----------------------------------------------Negative Reaction
@@ -472,7 +503,7 @@ void positiveReaction(int playPos)
 //2. waiting time: light RGB
 //3. LEDs off, play tone
 //4. subsiding: no lights
-void negativeReaction(int playNeg, unsigned long wait) 
+void negativeReaction(int playNeg, unsigned long wait)
 {
   //vibrate:
   now = 0;
@@ -484,48 +515,51 @@ void negativeReaction(int playNeg, unsigned long wait)
   digitalWrite(VIBR, LOW);
 
   //waiting time
-  lightLED();
+  lightRGB();
   doNothing(wait);
-  unlightLED();
+  unlightRGB();
 
   //play tone:
-  lightLED();
+  lightRGB();
   now = 0;
-  while (now < 600) {
-    tone(SPEAK, playNeg, 10);
-  }
-  unlightLED();
+  //while (now < 600) {
+  tone(SPEAK, playNeg, 600);
+  //}
+  //reset();
+  unlightRGB();
 
   //subsiding time
-  //lightLED();
-  doNothing(subsideAfterReaction);
-  //unlightLED();
+  //lightRGB();
+  //doNothing(subsideAfterReaction);
+  subside(subsideAfterReaction);
+  //unlightRGB();
 }
 
 //-----------------------------------------------check incoming data
 //1. signal range between 300 and 2400 Hz
 //2.1. data exists: increase abundancy
 //2.2. positive reaction
-//3.1. data does not exist: 
-void checkIncomingData(int incomingData) 
+//3.1. data does not exist:
+void checkIncomingData(int incomingData)
 {
-  if (incomingData >= 300 && incomingData <= 2400) 
+  //if (incomingData >= 300 && incomingData <= 2400)
+  if (incomingData <= 2400)
   {
 
     //data exists (incomingData within acceptable tolerance): increase abundancy
-    for (int i = 0; i < dbLength; i++) 
+    for (int i = 0; i < dbLength; i++)
     {
-      if (abs(incomingData - db[i]) < freqTol) 
+      if (abs(incomingData - db[i]) < freqTol)
       {
         ab[i]++;
         abTot++;
-        if (incomingData >= 300 && incomingData < 1000) 
+        if (incomingData >= 300 && incomingData < 1000)
         {
           redAb++;
-        } else if (incomingData >= 1000 && incomingData < 1700) 
+        } else if (incomingData >= 1000 && incomingData < 1700)
         {
           greenAb++;
-        } else if (incomingData >= 1700 && incomingData < 2401) 
+        } else if (incomingData >= 1700 && incomingData < 2401)
         {
           blueAb++;
         }
@@ -536,14 +570,14 @@ void checkIncomingData(int incomingData)
     }
 
     //data does not exist:
-    if (!dataExists) 
+    if (!dataExists)
     {
-      
+
       int lowest = ab[0];
       int lowestIdx = 0;
-      for (int i = 0; i < dbLength; i++) 
+      for (int i = 0; i < dbLength; i++)
       {
-        if (ab[i] < lowest) 
+        if (ab[i] < lowest)
         {
           lowest = ab[i];
           lowestIdx = i;
@@ -552,31 +586,31 @@ void checkIncomingData(int incomingData)
       //lower abundancy
       ab[lowestIdx]--;
       abTot--;
-      if (incomingData >= 300 && incomingData < 1000) 
+      if (incomingData >= 300 && incomingData < 1000)
       {
         redAb--;
-      } else if (incomingData >= 1000 && incomingData < 1700) 
+      } else if (incomingData >= 1000 && incomingData < 1700)
       {
         greenAb--;
-      } else if (incomingData >= 1700 && incomingData < 2401) 
+      } else if (incomingData >= 1700 && incomingData < 2401)
       {
         blueAb--;
       }
 
       //if abundancy = 0, replace data
-      if (ab[lowestIdx] == 0) 
+      if (ab[lowestIdx] == 0)
       {
         db[lowestIdx] = incomingData;
         //increase abundancy
         ab[lowestIdx] = 1;
         abTot++;
-        if (incomingData >= 300 && incomingData < 1000) 
+        if (incomingData >= 300 && incomingData < 1000)
         {
           redAb++;
-        } else if (incomingData >= 1000 && incomingData < 1700) 
+        } else if (incomingData >= 1000 && incomingData < 1700)
         {
           greenAb++;
-        } else if (incomingData >= 1700 && incomingData < 2401) 
+        } else if (incomingData >= 1700 && incomingData < 2401)
         {
           blueAb++;
         }
@@ -638,30 +672,33 @@ void checkIncomingData(int incomingData)
   } else {
     //Serial.println("incomingData out of range");
   }
-  digitalWrite(LED_info, HIGH);
+  //digitalWrite(LED_info, HIGH);
 }
 
 
 //------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------------------LOOP---------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------------
-//1. checkClipping + constant RGB off
+//1. constant RGB off
 //2. timed emission, if millis dividable by waitFactor
-//3.
-void loop() 
+//3. check for amplitude- and period-trigger
+//(3.1. react accordingly)
+//(3.2. clear variables, wait)
+void loop()
 {
+  //checkClipping();
+  unlightRGB();
 
-  checkClipping();
-  unlightLED();
-
-  if (millis() % (waitFactor) <= 300) 
-  {
+  /*if (millis() % (waitFactor) <= 300)
+    {
     digitalWrite(LED_info, LOW);
+    listen = false;
     timedStatement();
+    listen = true;
     digitalWrite(LED_info, HIGH);
-  }
+    }*/
 
-  if (checkMaxAmp > ampThreshold) 
+  if (checkMaxAmp > ampThreshold && periodFound)
   {
     for (int i = 0; i < medianLength; i++) {
       frequency = 38462 / float(period); //calculate frequency timer rate/period
@@ -677,18 +714,20 @@ void loop()
     dataExists = false;
     listen = false;
     digitalWrite(LED_info, LOW);
-    checkIncomingData(median[4]);
+    //checkIncomingData(median[4]);
+    positiveReaction(median[4]);
 
     //reset all values to avoid self-recording:
+    //reset();
+    //resetAll();
+    //time = 0;//reset clock
+    //noMatch = 0;
+    index = 0;//reset index
     maxAmp = 0;
     checkMaxAmp = 0;
     ampTimer = 0;
-    for (int i = 0; i < medianLength; i++) {
-      median[i] = 0;
-    }
-    frequency = 0;
+
+    doNothing(3000);
     listen = true;
   }
-
 }
-

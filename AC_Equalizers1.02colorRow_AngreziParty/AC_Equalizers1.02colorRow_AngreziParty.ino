@@ -1,15 +1,39 @@
-//generalized wave freq detection with 38.5kHz sampling rate and interrupts
-//by Amanda Ghassaei
-//https://www.instructables.com/id/Arduino-Frequency-Detection/
-//Sept 2012
+/*Acoustic Community Equalizer Project
+   for Radio Angrezi Einweihungsparty
+   12.12.2018
 
-/*
+   one color per module
+   five modules per freq-band --> color
+
+
+
+  //generalized wave freq detection with 38.5kHz sampling rate and interrupts
+  //by Amanda Ghassaei
+  //https://www.instructables.com/id/Arduino-Frequency-Detection/
+  //Sept 2012
+
+  /*
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
 */
+#include <elapsedMillis.h>
+elapsedMillis now = 0;
+const int LED_info = 5;
+const int LED_R = 6;
+const int LED_G = 10;
+const int LED_B = 9;
+
+float anteil_R = 0;
+float anteil_G = 1;
+float anteil_B = 0;
+
+int center_freq = 3000;
+int freq_spanne = 500;
+byte sensitivity = 120;
+int glowDuration = 20; //time for colors to light up
 
 
 //clipping indicator variables
@@ -37,21 +61,21 @@ int timerTol = 10;//timer tolerance- adjust this if you need
 unsigned int ampTimer = 0;
 byte maxAmp = 0;
 byte checkMaxAmp;
-byte ampThreshold = 40;//raise if you have a very noisy signal
+byte ampThreshold = sensitivity;//raise if you have a very noisy signal
 byte midpoint = 125;
 
 //smoothing data
 const int medianLength = 9;
 float median[medianLength];
 
-
-
 void setup() {
 
   Serial.begin(9600);
 
-  pinMode(13, OUTPUT); //led indicator pin
-  pinMode(12, OUTPUT); //output pin
+  pinMode(LED_info, OUTPUT);
+  pinMode(LED_R, OUTPUT);
+  pinMode(LED_G, OUTPUT);
+  pinMode(LED_B, OUTPUT);
 
   cli();//diable interrupts
 
@@ -141,7 +165,6 @@ ISR(ADC_vect) {//when new ADC value ready
     checkMaxAmp = maxAmp;
     maxAmp = 0;
   }
-
 }
 
 void reset() { //clea out some variables
@@ -174,31 +197,40 @@ void loop() {
 
   checkClipping();
 
-  if (checkMaxAmp > ampThreshold) {
-    for (int i = 0; i < medianLength; i++) {
-      frequency = 38462 / float(period); //calculate frequency timer rate/period
+  //if (checkMaxAmp > ampThreshold) {
+  for (int i = 0; i < medianLength; i++) {
+    frequency = 38462 / float(period); //calculate frequency timer rate/period
 
-      median[i] = frequency;
-      delay(10);
-
-      sortFloat(median, medianLength);
-    }
+    median[i] = frequency;
 
 
-    //print results
-    //Serial.print(frequency);
-    //Serial.println(" hz");
-    if (median >= 100)
-    {
-      Serial.print("median: ");
-      Serial.println(median[4]);
-    }
+    sortFloat(median, medianLength);
+    //}
+  }
+  if (median[4] < center_freq + freq_spanne && median[4] > center_freq - freq_spanne)
+  {
+    float red = (1 - anteil_R) * 255;
+    float green = (1 - anteil_G) * 255;
+    float blue = (1 - anteil_B) * 255;
+
+    now = 0;
+    analogWrite(LED_R, red);
+    analogWrite(LED_G, green);
+    analogWrite(LED_B, blue);
+
   }
 
-
-  delay(100);//delete this if you want
-
-  //do other stuff here
+  if (now > glowDuration)
+  {
+    analogWrite(LED_R, 255);
+    analogWrite(LED_G, 255);
+    analogWrite(LED_B, 255);
+    frequency = 0;
+    for (int i = 0; i < medianLength; i++)
+    {
+      median[i] = 0;
+    }
+  }
 }
 
 
