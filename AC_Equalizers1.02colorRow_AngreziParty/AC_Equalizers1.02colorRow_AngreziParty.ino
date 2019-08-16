@@ -28,11 +28,11 @@ const int LED_B = 9;
 
 float anteil_R = 0;
 float anteil_G = 1;
-float anteil_B = 0;
+float anteil_B = 1;
 
-int center_freq = 3000;
-int freq_spanne = 500;
-byte sensitivity = 120;
+int center_freq = 500;
+int freq_spanne = 200;
+byte sensitivity = 50;
 int glowDuration = 20; //time for colors to light up
 
 
